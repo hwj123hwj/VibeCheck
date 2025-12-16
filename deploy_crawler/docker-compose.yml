@@ -1,0 +1,33 @@
+  # === 数据库服务 ===
+  db:
+    image: pgvector/pgvector:pg17 # 使用 Postgres 17 + pgvector
+    container_name: music_db_server
+    restart: always
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 15671040800q
+      POSTGRES_DB: music_db
+    ports:
+      # 映射到宿主机端口，方便外部查看工具连接（可选）
+      - "5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  # === 爬虫应用服务 ===
+  crawler:
+    build: .
+    container_name: music_crawler_server
+    restart: on-failure  # 失败重启，直到成功
+    depends_on:
+      - db
+    environment:
+      # 数据库连接配置 (对应 db 服务)
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: root
+      DB_PASSWORD: 15671040800q
+      DB_NAME: music_db
+    tty: true
+
+volumes:
+  db_data:
