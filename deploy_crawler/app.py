@@ -172,9 +172,10 @@ class ServerMusicCrawler:
                         if session.query(Song).filter_by(id=s_id).first():
                             continue
                         
-                        s_title = track['name']
+                        s_title = track['name'][:250]
                         ar_list = track.get('artists', [])
                         s_artist = "/".join([ar['name'] for ar in ar_list]) if ar_list else "Unknown"
+                        s_artist = s_artist[:250]
                         
                         # 3. 抓取歌词
                         lyric_url = f"http://music.163.com/api/song/lyric?id={s_id}&lv=1&kv=1&tv=-1"
