@@ -132,65 +132,85 @@ class ServerMusicCrawler:
         total = len(playlists)
         for idx, pl in enumerate(playlists):
             playlist_id = pl['id']
-            # print(f"    ({idx+1}/{total}) 正在处理歌单: {pl['title']}")
+            print(f"    ({idx+1}/{total}) 正在处理歌单: {pl['title']}")
             
-            # API 获取歌单详情
+            # 1. 获取歌单详情 (API) - 拿所有 ID
             api_url = f"https://music.163.com/api/v6/playlist/detail?id={playlist_id}"
+            
             data = self._safe_request(api_url)
             if not data: continue
                 
-            tracks = []
-            if "playlist" in data and "tracks" in data["playlist"]:
-                tracks = data["playlist"]["tracks"]
+            track_ids = []
+            if "playlist" in data and "trackIds" in data["playlist"]:
+                track_ids = [str(t['id']) for t in data["playlist"]["trackIds"]]
+            elif "playlist" in data and "tracks" in data["playlist"]:
+                track_ids = [str(t['id']) for t in data["playlist"]["tracks"]]
             
-            # 遍历歌曲
-            for track in tracks:
-                try:
-                    s_id = str(track['id'])
-                    
-                    # 查重 (本地数据库)
-                    if session.query(Song).filter_by(id=s_id).first():
-                        continue
-                    
-                    s_title = track['name']
-                    ar_list = track.get('ar', [])
-                    s_artist = "/".join([ar['name'] for ar in ar_list]) if ar_list else "Unknown"
-                    
-                    # 抓取歌词
-                    lyric_url = f"http://music.163.com/api/song/lyric?id={s_id}&lv=1&kv=1&tv=-1"
-                    l_data = self._safe_request(lyric_url)
-                    
-                    raw_lyric = ""
-                    if l_data and "lrc" in l_data and "lyric" in l_data["lrc"]:
-                        raw_lyric = l_data["lrc"]["lyric"]
-                    
-                    # 清洗 & 过滤
-                    clean_lyric = self._clean_lyric(raw_lyric)
-                    if not clean_lyric or len(clean_lyric) < 10:
-                        continue
-                    
-                    # 入库
-                    new_song = Song(
-                        id=s_id,
-                        title=s_title,
-                        artist=s_artist,
-                        lyrics=clean_lyric
-                    )
-                    session.add(new_song)
-                    saved_in_batch += 1
-                    self.total_songs_saved += 1
-                    
-                    # 每20首提交一次
-                    if saved_in_batch % 20 == 0:
-                        session.commit()
-                        print(f"        -> 累计新增入库: {self.total_songs_saved} 首 (当前歌单进度... )")
+            if not track_ids: continue
+            
+            # print(f"        -> 包含 {len(track_ids)} 首歌曲，开始分批处理...")
+            
+            # 2. 分批处理歌曲 (获取详情 -> 歌词 -> 入库)
+            batch_size = 50
+            for i in range(0, len(track_ids), batch_size):
+                batch_ids = track_ids[i : i+batch_size]
+                
+                # A. 获取这50首的详情 (为了拿 Title 和 Artist)
+                ids_param = str(batch_ids).replace("'", "")
+                detail_url = f"http://music.163.com/api/song/detail?ids={ids_param}"
+                
+                d_data = self._safe_request(detail_url)
+                if not d_data or "songs" not in d_data:
+                    continue
+                
+                # B. 遍历这50首详情
+                for track in d_data["songs"]:
+                    try:
+                        s_id = str(track['id'])
                         
-                except:
-                    pass
-            
-            # 每个歌单提交一次
-            session.commit()
-        
+                        # 查重 (本地数据库)
+                        if session.query(Song).filter_by(id=s_id).first():
+                            continue
+                        
+                        s_title = track['name']
+                        ar_list = track.get('artists', [])
+                        s_artist = "/".join([ar['name'] for ar in ar_list]) if ar_list else "Unknown"
+                        
+                        # 3. 抓取歌词
+                        lyric_url = f"http://music.163.com/api/song/lyric?id={s_id}&lv=1&kv=1&tv=-1"
+                        l_data = self._safe_request(lyric_url)
+                        
+                        raw_lyric = ""
+                        if l_data and "lrc" in l_data and "lyric" in l_data["lrc"]:
+                            raw_lyric = l_data["lrc"]["lyric"]
+                        
+                        # 清洗 & 过滤
+                        clean_lyric = self._clean_lyric(raw_lyric)
+                        if not clean_lyric or len(clean_lyric) < 10:
+                            continue
+                        
+                        # 入库
+                        new_song = Song(
+                            id=s_id,
+                            title=s_title,
+                            artist=s_artist,
+                            lyrics=clean_lyric
+                        )
+                        session.add(new_song)
+                        saved_in_batch += 1
+                        self.total_songs_saved += 1
+                        
+                        # 打印进度
+                        if saved_in_batch % 10 == 0:
+                            print(f"        -> 累计入库: {self.total_songs_saved} 首")
+                            
+                    except Exception as e:
+                        pass
+                
+                # 每50首(一个batch)提交一次数据库
+                session.commit()
+                # time.sleep(1) # 批次间休息
+
         session.close()
 
     def _clean_lyric(self, raw):
