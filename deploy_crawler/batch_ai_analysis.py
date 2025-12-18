@@ -50,7 +50,7 @@ prompt_template = """
 
 def analyze_single_song(song_data):
     """
-    单个歌曲分析逻辑
+    单个歌曲分析逻辑，加入频率控制和重试机制
     """
     s_id, title, artist, lyrics = song_data
     if not lyrics or len(lyrics) < 10:
@@ -59,29 +59,42 @@ def analyze_single_song(song_data):
     # 截断长歌词
     lyrics_input = lyrics[:1200]
     
-    try:
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": "你是一个专业的音乐情感分析引擎，只输出 JSON。"},
-                {"role": "user", "content": prompt_template.format(
-                    title=title,
-                    artist=artist,
-                    lyrics=lyrics_input
-                )}
-            ],
-            temperature=0.7,
-            response_format={ "type": "json_object" }
-        )
-        
-        result = json.loads(response.choices[0].message.content)
-        return s_id, result, None
-    except Exception as e:
-        return s_id, None, str(e)
+    # 最多重试 3 次
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": "你是一个专业的音乐情感分析引擎，只输出 JSON。"},
+                    {"role": "user", "content": prompt_template.format(
+                        title=title,
+                        artist=artist,
+                        lyrics=lyrics_input
+                    )}
+                ],
+                temperature=0.7,
+                response_format={ "type": "json_object" }
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            # 成功后强制休息 3 秒，确保 RPM 安全
+            time.sleep(3)
+            return s_id, result, None
+            
+        except Exception as e:
+            err_msg = str(e)
+            if "429" in err_msg or "rate_limit" in err_msg:
+                wait_time = 15 * (attempt + 1)
+                print(f"  ! 触发频率限制，冷却 {wait_time} 秒后重试...")
+                time.sleep(wait_time)
+            else:
+                return s_id, None, err_msg
+                
+    return s_id, None, "Max retries reached"
 
-def batch_process(batch_size=21, max_workers=3, daily_limit=2000):
+def batch_process(batch_size=20, max_workers=1, daily_limit=2000):
     """
-    主批处理逻辑，带有每日上限保护
+    主批处理逻辑，降速为单线程以适配 QPS 限制
     """
     from datetime import datetime, date, time as dt_time
     
@@ -112,14 +125,14 @@ def batch_process(batch_size=21, max_workers=3, daily_limit=2000):
                 Song.is_duplicate == False,
                 func.length(Song.lyrics) <= 1200
             )
-        ).order_by(Song.created_at.asc()) # 按时间顺序处理
+        ).order_by(Song.created_at.desc()) # 改为倒序，先处理新抓到的
         
         total_pending = query.count()
         print(f"待处理总数: {total_pending}")
 
         processed_this_run = 0
         while processed_this_run < remaining_today:
-            # 动态计算本次 batch 大小，确保不超过今日余量
+            # 单线程模式下 batch 不需要太大
             current_batch_limit = min(batch_size, remaining_today - processed_this_run)
             batch_songs = query.limit(current_batch_limit).all()
             
@@ -127,40 +140,40 @@ def batch_process(batch_size=21, max_workers=3, daily_limit=2000):
                 print("所有待处理歌曲已全部完成！")
                 break
             
-            print(f"\n>>> 正在处理批次 (今日进度: {done_today + processed_this_run + len(batch_songs)}/{daily_limit})...")
+            print(f"\n>>> 正在一首一首分析 (今日进度: {done_today + processed_this_run + 1}/{daily_limit})...")
             
+            # 虽然设为了单线程，但保留 ThreadPoolExecutor 结构方便后续你提升权限后再改回来
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {executor.submit(analyze_single_song, song): song for song in batch_songs}
                 
                 for future in as_completed(futures):
                     s_id, result, error = future.result()
                     if error:
-                        print(f"  ! 歌曲 {s_id} 处理失败: {error}")
+                        print(f"  ! 歌曲 {s_id} 处理跳过: {error}")
                     else:
                         try:
                             update_session = Session()
-                            # 注意：我们需要更新记录以触发 updated_at
                             update_session.query(Song).filter(Song.id == s_id).update({
                                 Song.vibe_tags: result.get('vibe_tags'),
                                 Song.vibe_scores: result.get('emotional_scores'),
                                 Song.review_text: result.get('review'),
                                 Song.recommend_scene: result.get('scene'),
-                                Song.updated_at: datetime.now() # 显式设置确保统计准确
+                                Song.updated_at: datetime.now()
                             })
                             update_session.commit()
                             update_session.close()
+                            # print(f"  √ {s_id} OK")
                         except Exception as inner_e:
                             print(f"  ! 数据库写入失败 {s_id}: {inner_e}")
             
             processed_this_run += len(batch_songs)
-            time.sleep(1)
 
         if processed_this_run >= remaining_today:
-            print(f"\n已触及今日限额 ({daily_limit} 首)，脚本安全停止。明天再来吧！")
+            print(f"\n已触及今日限额 ({daily_limit} 首)，脚本安全停止。")
 
     finally:
         db_session.close()
 
 if __name__ == "__main__":
-    # 配置：每次取 21 首并发，3个线程，今日上限 2000 首
-    batch_process(batch_size=21, max_workers=3, daily_limit=2000)
+    # 改为单线程稳健模式
+    batch_process(batch_size=10, max_workers=1, daily_limit=2000)
