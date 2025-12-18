@@ -47,6 +47,7 @@ class Song(Base):
     album_cover = Column(String(500), nullable=True, comment='专辑封面 URL')
     is_duplicate = Column(Boolean, default=False, comment='是否为重复/翻唱版本')
     created_at = Column(DateTime, default=func.now(), comment='创建时间')
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment='最后更新时间')
 
 def create_database_if_not_exists():
     """

@@ -79,14 +79,32 @@ def analyze_single_song(song_data):
     except Exception as e:
         return s_id, None, str(e)
 
-def batch_process(batch_size=10, max_workers=5):
+def batch_process(batch_size=20, max_workers=5, daily_limit=2000):
     """
-    主批处理逻辑
+    主批处理逻辑，带有每日上限保护
     """
+    from datetime import datetime, date, time as dt_time
+    
     db_session = Session()
     try:
-        # 查找未处理的歌曲 (review_text 为空且不是重复歌曲)
-        # 注意：如果您想处理重复歌曲，可以去掉 is_duplicate 过滤
+        # 0. 统计今天已经处理了多少首 (根据 updated_at 判定)
+        today_start = datetime.combine(date.today(), dt_time.min)
+        done_today = db_session.query(Song).filter(
+            and_(
+                Song.review_text != None,
+                Song.updated_at >= today_start
+            )
+        ).count()
+        
+        remaining_today = daily_limit - done_today
+        
+        if remaining_today <= 0:
+            print(f"今日任务已达成！(已完成: {done_today}/{daily_limit})。脚本自动退出。")
+            return
+        
+        print(f"今日已完成: {done_today}/{daily_limit}，本次运行还将处理最多: {remaining_today} 首。")
+
+        # 1. 查找待处理的歌曲
         query = db_session.query(Song.id, Song.title, Song.artist, Song.lyrics).filter(
             and_(
                 Song.review_text == None,
@@ -94,23 +112,22 @@ def batch_process(batch_size=10, max_workers=5):
                 Song.is_duplicate == False,
                 func.length(Song.lyrics) <= 1200
             )
-        )
+        ).order_by(Song.created_at.asc()) # 按时间顺序处理
         
-        total_count = query.count()
-        print(f"开始批量 AI 分析任务，待处理歌曲总数: {total_count}")
-        
-        if total_count == 0:
-            print("没有运行任务的必要，所有歌曲已处理完毕。")
-            return
+        total_pending = query.count()
+        print(f"待处理总数: {total_pending}")
 
-        # 每次取出一批进行处理，避免内存占用过大
-        processed_total = 0
-        while True:
-            batch_songs = query.limit(batch_size).all()
+        processed_this_run = 0
+        while processed_this_run < remaining_today:
+            # 动态计算本次 batch 大小，确保不超过今日余量
+            current_batch_limit = min(batch_size, remaining_today - processed_this_run)
+            batch_songs = query.limit(current_batch_limit).all()
+            
             if not batch_songs:
+                print("所有待处理歌曲已全部完成！")
                 break
             
-            print(f"\n>>> 正在处理批次 ({processed_total}/{total_count})...")
+            print(f"\n>>> 正在处理批次 (今日进度: {done_today + processed_this_run + len(batch_songs)}/{daily_limit})...")
             
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {executor.submit(analyze_single_song, song): song for song in batch_songs}
@@ -119,32 +136,31 @@ def batch_process(batch_size=10, max_workers=5):
                     s_id, result, error = future.result()
                     if error:
                         print(f"  ! 歌曲 {s_id} 处理失败: {error}")
-                        # 如果失败，我们可以给它打个标记避免死循环，或者直接跳过
-                        # 这里简单处理：暂时不更新数据库，下次还会查出来
                     else:
-                        # 更新数据库
                         try:
-                            # 开启一个新的 session 执行更新，防止主查询 session 冲突
                             update_session = Session()
-                            song_obj = update_session.query(Song).get(s_id)
-                            song_obj.vibe_tags = result.get('vibe_tags')
-                            song_obj.vibe_scores = result.get('emotional_scores')
-                            song_obj.review_text = result.get('review')
-                            song_obj.recommend_scene = result.get('scene')
+                            # 注意：我们需要更新记录以触发 updated_at
+                            update_session.query(Song).filter(Song.id == s_id).update({
+                                Song.vibe_tags: result.get('vibe_tags'),
+                                Song.vibe_scores: result.get('emotional_scores'),
+                                Song.review_text: result.get('review'),
+                                Song.recommend_scene: result.get('scene'),
+                                Song.updated_at: datetime.now() # 显式设置确保统计准确
+                            })
                             update_session.commit()
                             update_session.close()
-                            # print(f"  √ 歌曲 {s_id} 分析完成")
                         except Exception as inner_e:
-                            print(f"  ! 数据库持久化失败 {s_id}: {inner_e}")
+                            print(f"  ! 数据库写入失败 {s_id}: {inner_e}")
             
-            processed_total += len(batch_songs)
-            # 适当休眠，保护 API 频率
+            processed_this_run += len(batch_songs)
             time.sleep(1)
+
+        if processed_this_run >= remaining_today:
+            print(f"\n已触及今日限额 ({daily_limit} 首)，脚本安全停止。明天再来吧！")
 
     finally:
         db_session.close()
 
 if __name__ == "__main__":
-    # 配置：每次取 20 首，5个线程并发
-    # 500w token 每天大约能跑 5000-8000 首（取决于歌词长度）
-    batch_process(batch_size=20, max_workers=5)
+    # 配置：每次取 20 首并发，今日上限 2000 首
+    batch_process(batch_size=20, max_workers=5, daily_limit=2000)
