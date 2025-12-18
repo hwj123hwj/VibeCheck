@@ -31,20 +31,24 @@ def clean_lyrics(text):
     # B. 移除各种格式的时间轴：[00:25.0], [01:59], [01:59][00:15] 等
     text = re.sub(r'\[\d+:\d+(?:\.\d+)?\]', '', text)
     
-    # C. 定义无效行关键词模式
-    # 这些行通常包含制作团队、版权信息等，对意境分析是噪音
+    # C. 定义无效行关键词模式 (支持模糊匹配和常见空格变体)
     junk_keywords = [
-        '制作', '编写', '合声', '和声', '企划', '艺人统筹', '宣发', '封面', 
-        '录音', '混音', '母带', '吉他', '贝斯', '鼓', '键盘', '弦乐', 
-        '设计', '后期', '监制', '出品', '提供', '发行', '感谢', '未经', 
-        'OP', 'SP', '统筹', '录制', '排版', '曲词', '词曲', '作词', '作曲'
+        r'作\s*词', r'作\s*曲', r'填\s*词', r'编\s*曲', r'监\s*制', r'制\s*作', 
+        r'录\s*音', r'混\s*音', r'吉\s*他', r'贝\s*斯', r'鼓', r'键\s*盘', 
+        r'弦\s*乐', r'和\s*声', r'合\s*声', r'艺人统筹', r'宣\s*发', r'封\s*面', 
+        r'后期', r'出品', r'发行', r'音响总监', r'实\s*录', r'二\s*胡', 
+        r'笛\s*子', r'钢琴', r'小提琴', r'大提琴', r'古筝', r'琵琶', 
+        r'词', r'曲', r'Mix', r'Mastering', r'Arrangement', r'Producer', 
+        r'Bass', r'Guitar', r'Piano', r'Drums', r'Strings', r'Program',
+        r'OP', r'SP', r'Provided', r'Licensed', r'Technician', r'Director',
+        r'Produced'
     ]
     
     # 构造正则表达式：匹配包含关键词且后面紧跟冒号、等号或多量空格的行
-    # 例如 "企划 :", "制作人:", "和声设计  "
+    # 注意：使用 \s*[:：\s=] 确保匹配到分隔符，防止误删正常歌词
     junk_pattern = re.compile(
-        r'^.*(?:' + '|'.join(junk_keywords) + r').*[:：\s=].*$', 
-        re.IGNORECASE | re.MULTILINE
+        r'^\s*(?:' + '|'.join(junk_keywords) + r')\s*[:：\s=].*$', 
+        re.IGNORECASE
     )
     
     lines = text.split('\n')
