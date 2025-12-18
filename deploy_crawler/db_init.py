@@ -33,6 +33,9 @@ class Song(Base):
     lyrics = Column(Text, comment='原始歌词')
     segmented_lyrics = Column(Text, comment='分词后的歌词 (用于 TF-IDF)')
     review_text = Column(Text, comment='LLM 生成的情感评语')
+    vibe_tags = Column(JSONB, comment='AI 提取的意境标签 (List)')
+    vibe_scores = Column(JSONB, comment='AI 评分的情感维度 (Dict)')
+    recommend_scene = Column(Text, comment='AI 推荐的收听场景')
     
     # 核心向量字段
     # BAAI/bge-m3 output dimension is 1024
