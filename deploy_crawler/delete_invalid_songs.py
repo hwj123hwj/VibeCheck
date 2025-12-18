@@ -7,7 +7,7 @@ engine = create_engine(get_db_url())
 Session = sessionmaker(bind=engine)
 session = Session()
 
-def delete_short_lyrics(min_length=10):
+def delete_short_lyrics(min_length=50):
     print(f"正在准备删除歌词长度小于 {min_length} 个字符的异常歌曲...")
     
     # 首先查询一下符合条件的数量，给用户一个预期
@@ -37,4 +37,4 @@ def delete_short_lyrics(min_length=10):
         session.close()
 
 if __name__ == "__main__":
-    delete_short_lyrics(10)
+    delete_short_lyrics(50)
