@@ -218,8 +218,8 @@ class ServerMusicCrawler:
         if not raw: return ""
         # 1. 处理 NBSP 和特殊换行
         text = raw.replace('\xa0', ' ').replace('\u3000', ' ')
-        # 2. 移除时间轴
-        text = re.sub(r"\[\d{2}:\d{2}\.\d{2,3}\]", "", text)
+        # 2. 移除各种格式的时间轴：[00:25.0], [01:59], [01:59][00:15] 等
+        text = re.sub(r"\[\d+:\d+(?:\.\d+)?\]", "", text)
         
         # 3. 过滤噪音行
         junk_patterns = [
