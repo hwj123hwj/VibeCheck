@@ -38,10 +38,11 @@ def clean_lyrics(text):
         r'弦\s*乐', r'和\s*声', r'合\s*声', r'艺人统筹', r'宣\s*发', r'封\s*面', 
         r'后期', r'出品', r'发行', r'音响总监', r'实\s*录', r'二\s*胡', 
         r'笛\s*子', r'钢琴', r'小提琴', r'大提琴', r'古筝', r'琵琶', 
+        r'策\s*划', r'曲\s*绘', r'视\s*频', r'视\s*觉', r'录\s*混', r'营\s*销', 
         r'词', r'曲', r'Mix', r'Mastering', r'Arrangement', r'Producer', 
         r'Bass', r'Guitar', r'Piano', r'Drums', r'Strings', r'Program',
         r'OP', r'SP', r'Provided', r'Licensed', r'Technician', r'Director',
-        r'Produced'
+        r'Produced', r'PV', r'Vocal'
     ]
     
     # 构造正则表达式：匹配包含关键词且后面紧跟冒号、等号或多量空格的行
