@@ -43,12 +43,16 @@ def clean_lyrics(text):
         r'原\s*唱', r'音乐总监', r'BandLeader', r'打击乐', r'和\s*音', r'合\s*作',
         r'乐队总监', r'PGM', r'萨克斯', r'长\s*笛', r'小\s*号', r'长\s*号', r'声乐指导', 
         r'人声处理', r'键盘', r'手风琴', r'单簧管', r'低音', r'配\s*唱', 
+        r'CA', r'档\s*案', r'合成器', r'音\s*频', r'剪\s*辑', r'编\s*辑', 
         r'词', r'曲', r'Mix', r'Mastering', r'Arrangement', r'Producer', 
-        r'Bass', r'Guitar', r'Piano', r'Drums', r'Strings', r'Program',
+        r'Bass', r'Guitar', r'Piano', r'Drums', r'Strings', r'Programming',
         r'OP', r'SP', r'Provided', r'Licensed', r'Technician', r'Director',
         r'Produced', r'PV', r'Vocal', r'Chorus', r'Keyboard'
     ]
-    role_pattern = re.compile(r'^\s*(?:' + '|'.join(role_keywords) + r')\s*[:：\s=].*$', re.IGNORECASE)
+    
+    # 构造正则表达式：匹配包含关键词且后面紧跟冒号、等号或多量空格的行
+    # 特别注意：支持正斜杠分隔的组合角色，如 "钢琴合成器/Drum Programming :"
+    role_pattern = re.compile(r'^\s*.*(?:' + '|'.join(role_keywords) + r')\s*[:：\s=].*$', re.IGNORECASE)
     
     # 2. 营销/版权/背景声明类 (只要包含关键词就整行删除)
     promo_keywords = [
