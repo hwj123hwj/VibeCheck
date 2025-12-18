@@ -28,6 +28,10 @@ services:
       DB_USER: root
       DB_PASSWORD: 15671040800q
       DB_NAME: music_db
+      # LLM 接口配置
+      LONGMAO_API_KEY: "ak_1hb78c5hG3Oe7IQ1VM1nj58T2o373"
+      LONGMAO_BASE_URL: "https://api.longcat.chat/openai"
+      LONGMAO_MODEL: "LongCat-Flash-Chat"
     tty: true
     command: tail -f /dev/null
 
