@@ -5,7 +5,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from openai import OpenAI
-from sqlalchemy import create_engine, and_
+from sqlalchemy import create_engine, and_, func
 from sqlalchemy.orm import sessionmaker
 from db_init import Song, get_db_url
 
@@ -91,7 +91,8 @@ def batch_process(batch_size=10, max_workers=5):
             and_(
                 Song.review_text == None,
                 Song.lyrics != None,
-                Song.is_duplicate == False
+                Song.is_duplicate == False,
+                func.length(Song.lyrics) <= 1200
             )
         )
         
