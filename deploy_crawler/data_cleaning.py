@@ -31,27 +31,30 @@ def clean_lyrics(text):
     # B. 移除各种格式的时间轴：[00:25.0], [01:59], [01:59][00:15] 等
     text = re.sub(r'\[\d+:\d+(?:\.\d+)?\]', '', text)
     
-    # C. 定义无效行关键词模式 (支持模糊匹配和常见空格变体)
-    junk_keywords = [
+    # C. 定义无效行关键词模式
+    # 1. 演职员/乐器角色类 (通常带分隔符，如 "作词 :")
+    role_keywords = [
         r'作\s*词', r'作\s*曲', r'填\s*词', r'编\s*曲', r'监\s*制', r'制\s*作', 
         r'录\s*音', r'混\s*音', r'吉\s*他', r'贝\s*斯', r'鼓', r'键\s*盘', 
         r'弦\s*乐', r'和\s*声', r'合\s*声', r'艺人统筹', r'宣\s*发', r'封\s*面', 
         r'后期', r'出品', r'发行', r'音响总监', r'实\s*录', r'二\s*胡', 
         r'笛\s*子', r'钢琴', r'小提琴', r'大提琴', r'古筝', r'琵琶', 
         r'策\s*划', r'曲\s*绘', r'视\s*频', r'视\s*觉', r'录\s*混', r'营\s*销', 
-        r'原\s*唱', r'音乐总监', r'BandLeader', r'打击乐', r'和\s*音',
+        r'原\s*唱', r'音乐总监', r'BandLeader', r'打击乐', r'和\s*音', r'合\s*作',
         r'词', r'曲', r'Mix', r'Mastering', r'Arrangement', r'Producer', 
         r'Bass', r'Guitar', r'Piano', r'Drums', r'Strings', r'Program',
         r'OP', r'SP', r'Provided', r'Licensed', r'Technician', r'Director',
         r'Produced', r'PV', r'Vocal'
     ]
+    role_pattern = re.compile(r'^\s*(?:' + '|'.join(role_keywords) + r')\s*[:：\s=].*$', re.IGNORECASE)
     
-    # 构造正则表达式：匹配包含关键词且后面紧跟冒号、等号或多量空格的行
-    # 注意：使用 \s*[:：\s=] 确保匹配到分隔符，防止误删正常歌词
-    junk_pattern = re.compile(
-        r'^\s*(?:' + '|'.join(junk_keywords) + r')\s*[:：\s=].*$', 
-        re.IGNORECASE
-    )
+    # 2. 营销/版权/背景声明类 (只要包含关键词就整行删除)
+    promo_keywords = [
+        r'网易音乐人', r'现金激励', r'流量扶持', r'千亿流量', r'正式授权', 
+        r'未经许可', r'不得翻唱', r'st399@vip.163.com', r'版权所有', r'Copyright',
+        r'本作品', r'词曲版权'
+    ]
+    promo_pattern = re.compile(r'^.*(?:' + '|'.join(promo_keywords) + r').*$', re.IGNORECASE)
     
     lines = text.split('\n')
     clean_lines = []
@@ -62,7 +65,7 @@ def clean_lyrics(text):
             continue
             
         # 排除掉包含噪音关键词的行
-        if junk_pattern.match(stripped):
+        if role_pattern.match(stripped) or promo_pattern.match(stripped):
             continue
             
         # 排除掉一些太短且没意义的行（可选，这里先保留文字内容）
