@@ -79,7 +79,7 @@ def analyze_single_song(song_data):
     except Exception as e:
         return s_id, None, str(e)
 
-def batch_process(batch_size=20, max_workers=5, daily_limit=2000):
+def batch_process(batch_size=20, max_workers=3, daily_limit=2000):
     """
     主批处理逻辑，带有每日上限保护
     """
@@ -162,5 +162,5 @@ def batch_process(batch_size=20, max_workers=5, daily_limit=2000):
         db_session.close()
 
 if __name__ == "__main__":
-    # 配置：每次取 20 首并发，今日上限 2000 首
-    batch_process(batch_size=20, max_workers=5, daily_limit=2000)
+    # 配置：每次取 20 首并发，3个线程，今日上限 2000 首
+    batch_process(batch_size=20, max_workers=3, daily_limit=2000)
