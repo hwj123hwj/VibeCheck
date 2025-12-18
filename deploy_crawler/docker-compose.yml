@@ -14,11 +14,11 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
-  # === 爬虫应用服务 ===
+  # === 爬虫应用服务 (已进入挂机模式，仅用于跑脚本) ===
   crawler:
     build: .
     container_name: music_crawler_server
-    restart: on-failure  # 失败重启，直到成功
+    restart: always 
     depends_on:
       - db
     environment:
@@ -29,6 +29,7 @@ services:
       DB_PASSWORD: 15671040800q
       DB_NAME: music_db
     tty: true
+    command: tail -f /dev/null
 
 volumes:
   db_data:
