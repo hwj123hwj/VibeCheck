@@ -172,10 +172,10 @@ class ServerMusicCrawler:
                         if session.query(Song).filter_by(id=s_id).first():
                             continue
                         
-                        s_title = track['name'][:250]
+                        s_title = track['name'].replace('\xa0', ' ').strip()[:250]
                         ar_list = track.get('artists', [])
                         s_artist = "/".join([ar['name'] for ar in ar_list]) if ar_list else "Unknown"
-                        s_artist = s_artist[:250]
+                        s_artist = s_artist.replace('\xa0', ' ').strip()[:250]
                         
                         # 3. 抓取歌词
                         lyric_url = f"http://music.163.com/api/song/lyric?id={s_id}&lv=1&kv=1&tv=-1"
@@ -216,10 +216,33 @@ class ServerMusicCrawler:
 
     def _clean_lyric(self, raw):
         if not raw: return ""
-        text = re.sub(r"\[\d{2}:\d{2}\.\d{2,3}\]", "", raw)
-        text = re.sub(r"^.*(作词|作曲|编曲|制作|发行|混音|母带|演唱|监制|录音|吉他|贝斯|鼓).*$", "", text, flags=re.MULTILINE)
-        lines = [line.strip() for line in text.split("\n") if line.strip()] 
-        return "\n".join(lines)
+        # 1. 处理 NBSP 和特殊换行
+        text = raw.replace('\xa0', ' ').replace('\u3000', ' ')
+        # 2. 移除时间轴
+        text = re.sub(r"\[\d{2}:\d{2}\.\d{2,3}\]", "", text)
+        
+        # 3. 过滤噪音行
+        junk_patterns = [
+            r'^.*(?:制作|编写|合声|和声|企划|艺人统筹|宣发|封面|录音|混音|母带|吉他|贝斯|鼓|键盘|弦乐|设计|后期|监制|出品|提供|发行|感谢|未经|OP|SP).*[:：\s].*$',
+            r'^.*词曲.*$',
+        ]
+        
+        lines = text.split('\n')
+        clean_lines = []
+        for line in lines:
+            line = line.strip()
+            if not line: continue
+            
+            is_junk = False
+            for p in junk_patterns:
+                if re.match(p, line, re.IGNORECASE):
+                    is_junk = True
+                    break
+            
+            if not is_junk:
+                clean_lines.append(line)
+        
+        return "\n".join(clean_lines)
 
 if __name__ == "__main__":
     # 在开始前确保数据库已初始化
