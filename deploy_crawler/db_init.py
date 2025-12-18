@@ -1,6 +1,6 @@
 import os
 import time
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, func, JSON, text
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, func, JSON, text, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB
@@ -42,6 +42,7 @@ class Song(Base):
     tfidf_vector = Column(JSONB, comment='TF-IDF 向量 (JSON)')
     
     album_cover = Column(String(500), nullable=True, comment='专辑封面 URL')
+    is_duplicate = Column(Boolean, default=False, comment='是否为重复/翻唱版本')
     created_at = Column(DateTime, default=func.now(), comment='创建时间')
 
 def create_database_if_not_exists():
