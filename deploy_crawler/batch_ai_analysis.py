@@ -77,8 +77,8 @@ def analyze_single_song(song_data):
             )
             
             result = json.loads(response.choices[0].message.content)
-            # 成功后强制休息 3 秒，确保 RPM 安全
-            time.sleep(3)
+            # 成功后强制休息 5 秒，确保 RPM 安全
+            time.sleep(5)
             return s_id, result, None
             
         except Exception as e:
