@@ -1,26 +1,28 @@
 #!/bin/bash
 
 # =================================================================
-# VibeCheck 每日 AI 情感分析自动化脚本
+# VibeCheck 每日 AI 情感分析自动化脚本 (Crontab 稳健版)
 # =================================================================
 
-# 1. 获取脚本所在的绝对路径
+# 1. 强制注入系统路径，确保 crontab 环境能找到所有依赖命令
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# 2. 定位脚本所在目录
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-LOG_FILE="$SCRIPT_DIR/ai_progress.log"
+# 3. 定义宿主机日志文件 (cron_ai.log)
+LOG_FILE="$SCRIPT_DIR/cron_ai.log"
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] >>> 自动任务启动: 准备执行 AI 情感分析..." >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] >>> [HOST] 自动任务启动..." >> "$LOG_FILE"
 
-# 2. 检查 Docker 容器是否在运行，如果没开则启动
-# up -d 会确保 db 和 crawler 都在线，但不会中断已有的连接
+# 4. 确保 Docker 容器处于运行状态
 docker compose up -d >> "$LOG_FILE" 2>&1
 
-# 3. 执行分析脚本
-# 使用 -T 参数是因为 crontab 没有分配终端 (tty)
-# 我们不使用 -d，让 shell 脚本保持打开直到分析任务完成 (2000/3000首结束)
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 正在运行 batch_ai_analysis.py..." >> "$LOG_FILE"
+# 5. 执行 Python 分析逻辑
+# -T 标志用于非交互式 shell (crontab 环境必须)
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] >>> [CONTAINER] 开始运行 batch_ai_analysis.py..." >> "$LOG_FILE"
 docker compose exec -T crawler python /app/batch_ai_analysis.py >> "$LOG_FILE" 2>&1
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] <<< 任务执行完毕 (或已达每日上限)。" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] <<< [HOST] 任务执行结束。" >> "$LOG_FILE"
 echo "------------------------------------------------------------------" >> "$LOG_FILE"
