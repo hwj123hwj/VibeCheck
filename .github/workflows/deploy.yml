@@ -1,0 +1,52 @@
+name: Deploy VibeCheck (Self-Hosted ZIP)
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Fast ZIP Deployment via Proxy
+        run: |
+          echo "🚀 [1/2] 环境准备..."
+          
+          # 检查并安装 unzip
+          if ! command -v unzip >/dev/null 2>&1; then
+            echo "🔧 安装 unzip..."
+            while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+              echo "⏳ 等待 apt 锁释放..."
+              sleep 2
+            done
+            sudo apt-get update && sudo apt-get install -y unzip
+          fi
+          
+          PROJECT_PATH="/home/ubuntu/VibeCheck"
+          # 注意：这里我们只删除旧的代码，保留可能存在的 .env 或日志目录（视情况而定）
+          # 为了彻底干净，我们按你的模板执行，但建议重要数据存放在 Docker Volume 中
+          sudo rm -rf $PROJECT_PATH
+          mkdir -p $PROJECT_PATH
+          cd $PROJECT_PATH
+          
+          echo "📥 通过代理下载项目源码..."
+          curl -o project.zip -L https://ghproxy.net/https://github.com/hwj123hwj/VibeCheck/archive/refs/heads/master.zip
+          
+          if [ ! -f "project.zip" ]; then
+            echo "❌ 错误: ZIP 下载失败!"
+            exit 1
+          fi
+
+          echo "📦 解压缩..."
+          unzip -o project.zip
+          
+          echo "📂 整理目录结构..."
+          # GitHub ZIP 默认生成 VibeCheck-master 目录
+          mv VibeCheck-master/* . 2>/dev/null || true
+          rm -rf VibeCheck-master project.zip
+          
+          echo "🚀 [2/2] 执行部署脚本..."
+          chmod +x deploy.sh
+          ./deploy.sh
+          
+          echo "🎉 部署全部完成！"
