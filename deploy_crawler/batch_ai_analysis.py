@@ -175,5 +175,5 @@ def batch_process(batch_size=20, max_workers=1, daily_limit=2000):
         db_session.close()
 
 if __name__ == "__main__":
-    # 改为单线程稳健模式，每日上限调至 3000 首
-    batch_process(batch_size=10, max_workers=1, daily_limit=3000)
+    # 改为单线程稳健模式，每日上限调至 4500 首
+    batch_process(batch_size=10, max_workers=1, daily_limit=4500)
