@@ -7,9 +7,9 @@ from db_init import get_db_url
 engine = create_engine(get_db_url())
 Session = sessionmaker(bind=engine)
 
-def extract_chorus(lyrics, top_n=5):
+def extract_chorus(lyrics, top_n=10):
     """
-    通过高频探测和长度过滤提取核心副歌
+    通过高频探测和长度过滤提取核心内容 (Top 10)
     """
     if not lyrics:
         return ""
