@@ -10,59 +10,45 @@ Session = sessionmaker(bind=engine)
 def batch_update_core_lyrics():
     session = Session()
     try:
-        # 1. 查找待处理歌曲
-        pending_songs_query = session.query(Song).filter(
-            Song.lyrics != None,
-            (Song.core_lyrics == None) | (Song.core_lyrics == '')
-        )
+        # 1. 一次性获取所有待处理任务的 ID 列表 (这是最稳的写法，避免查询视图动态变动导致的死循环)
+        print("🔍 正在扫描数据库待处理项...")
+        pending_ids = [r[0] for r in session.execute(
+            text("SELECT id FROM songs WHERE lyrics IS NOT NULL AND (core_lyrics IS NULL OR core_lyrics = '')")
+        ).fetchall()]
         
-        total_pending = pending_songs_query.count()
+        total_pending = len(pending_ids)
         print(f"📦 发现有 {total_pending} 首歌待提取精华歌词...")
         
         if total_pending == 0:
             print("✅ 没有待处理的歌曲。")
             return
 
-        batch_size = 200
         processed = 0
+        batch_size = 200
         
-        # 为了防止死循环，我们记录一下连续出现相同结果的次数
-        last_id = None
-        repeat_count = 0
-
-        while True:
-            # 2. 获取一批
-            songs = pending_songs_query.limit(batch_size).all()
-            if not songs:
-                break
+        # 2. 遍历 ID 列表进行分批处理
+        for i in range(0, total_pending, batch_size):
+            batch_ids = pending_ids[i:i + batch_size]
             
-            # 安全检查：如果连续两次抓到的第一个 ID 一样，说明更新没生效
-            if last_id == songs[0].id:
-                print(f"⚠️ 检测到数据更新瓶颈 (ID: {songs[0].id})，正在尝试强制修复...")
-                repeat_count += 1
-                if repeat_count > 3:
-                    print("❌ 无法跳出的死循环，程序终止。请检查数据库状态。")
-                    break
-            else:
-                last_id = songs[0].id
-                repeat_count = 0
-
-            # 3. 逐一提取并更新
+            # 获取这一批的具体对象
+            songs = session.query(Song).filter(Song.id.in_(batch_ids)).all()
+            
             for s in songs:
                 try:
                     core = extract_chorus(s.lyrics)
-                    # 核心加固：如果提取结果还是空，强制存入 [N/A]
+                    # 强补丁：如果是空，存入占位符，防止以后被反复抓取
                     if not core or core.strip() == "":
                         s.core_lyrics = "[N/A]"
                     else:
                         s.core_lyrics = core
                 except Exception as e:
-                    print(f"  ❌ 歌曲 {s.title} (ID: {s.id}) 提取错误: {e}")
+                    print(f"  ❌ 提取报错 (ID: {s.id}): {e}")
                     s.core_lyrics = "[ERROR]"
             
+            # 每一批提交一次，落袋为安
             session.commit()
             processed += len(songs)
-            print(f"🚀 已处理 {processed} 首...")
+            print(f"🚀 进度: {processed}/{total_pending} ...")
             
     except Exception as e:
         print(f"💥 发生严重错误: {e}")
@@ -73,4 +59,4 @@ def batch_update_core_lyrics():
 if __name__ == "__main__":
     start_time = time.time()
     batch_update_core_lyrics()
-    print(f"✨ 任务结束！耗时: {time.time() - start_time:.2f} 秒")
+    print(f"✨ 任务已完成！耗时: {time.time() - start_time:.2f} 秒")
