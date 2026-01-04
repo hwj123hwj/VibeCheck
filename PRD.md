@@ -20,7 +20,7 @@
     * **向量化 (Embedding)**：硅基流动 API (BAAI/bge-m3)
 
 ## 3. 数据库设计 (Database Schema)
-请在 PostgreSQL 中创建一个名为 `music_rec_db` 的数据库。
+请在 PostgreSQL 中创建一个名为 `music_db` 的数据库。
 **注意：BAAI/bge-m3 模型的输出维度为 1024，请务必设置正确的向量维度。**
 
 | 表名：songs | | |
