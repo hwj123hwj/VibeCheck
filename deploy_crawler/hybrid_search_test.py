@@ -32,9 +32,10 @@ def hybrid_search(query_text, top_k=5):
         # 使用 pgvector 的余弦相似度 <=> 操作符进行检索
         # 由于我们存的是 1024 维，这里直接对比
         # 计算公式：1 - (vector <=> query_vec) 得到相似度 (1是完美匹配)
+        # 修正 SQL 占位符写法，避免 SQLAlchemy 与 PG 类型转换符号 :: 冲突
         search_sql = text("""
             SELECT id, title, artist, vibe_tags, 
-                   (1 - (review_vector <=> :q_vec::vector)) as semantic_score,
+                   (1 - (review_vector <=> CAST(:q_vec AS vector))) as semantic_score,
                    review_text
             FROM songs
             WHERE review_vector IS NOT NULL
