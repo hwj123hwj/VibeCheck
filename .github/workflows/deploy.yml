@@ -19,8 +19,13 @@ jobs:
           # 创建目录（如果不存在）
           mkdir -p $TARGET_PATH
           
-          # 排除干扰文件，同步代码到生产位置
-          rsync -av --delete --exclude '.git' --exclude '.github' ./ $TARGET_PATH/
+          # 排除干扰文件和由 Docker 产生的 root 权限缓存文件
+          rsync -av --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '__pycache__' \
+            --exclude '*.pyc' \
+            ./ $TARGET_PATH/
           
           cd $TARGET_PATH
           echo "🚀 [2/2] 执行部署脚本..."
