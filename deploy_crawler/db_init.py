@@ -33,9 +33,9 @@ class Song(Base):
     lyrics = Column(Text, comment='原始歌词')
     segmented_lyrics = Column(Text, comment='分词后的歌词 (用于 TF-IDF)')
     review_text = Column(Text, comment='LLM 生成的情感评语')
-    vibe_tags = Column(JSONB, comment='AI 提取的意境标签 (List)')
-    vibe_scores = Column(JSONB, comment='AI 评分的情感维度 (Dict)')
-    recommend_scene = Column(Text, comment='AI 推荐的收听场景')
+    vibe_tags = Column(JSONB, comment='LLM 提取的氛围标签 (JSONB 数组)')
+    vibe_scores = Column(JSONB, comment='情感维度评分 (JSONB)')
+    recommend_scene = Column(Text, comment='LLM 建议的听歌场景')
     
     # 核心向量字段
     # BAAI/bge-m3 output dimension is 1024
@@ -45,7 +45,7 @@ class Song(Base):
     tfidf_vector = Column(JSONB, comment='TF-IDF 向量 (JSON)')
     
     album_cover = Column(String(500), nullable=True, comment='专辑封面 URL')
-    is_duplicate = Column(Boolean, default=False, comment='是否为重复/翻唱版本')
+    is_duplicate = Column(Boolean, default=False, comment='是否为重复歌曲')
     created_at = Column(DateTime, default=func.now(), comment='创建时间')
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment='最后更新时间')
 
