@@ -1,3 +1,4 @@
+import os
 import jieba
 import re
 from sqlalchemy import create_engine, and_, text
@@ -60,6 +61,14 @@ def compute_and_save_tfidf(top_n=10):
     """
     session = Session()
     try:
+        # 加载停用词
+        stop_words = []
+        stop_words_path = os.path.join(os.path.dirname(__file__), "stopwords.txt")
+        if os.path.exists(stop_words_path):
+            with open(stop_words_path, "r", encoding="utf-8") as f:
+                stop_words = [line.strip() for line in f if line.strip()]
+            print(f"已加载 {len(stop_words)} 个停用词。")
+
         # 获取所有已分词且非重复的歌曲
         songs = session.query(Song).filter(
             and_(
@@ -79,9 +88,10 @@ def compute_and_save_tfidf(top_n=10):
         print(f"正在计算 {len(corpus)} 首歌曲的 TF-IDF 矩阵...")
         
         # 定义 TF-IDF 向量化器
+        # stop_words: 传入停用词列表，过滤无意义词汇
         # max_df=0.9: 过滤掉在 90% 以上文档中出现的词
         # min_df=2: 过滤掉只在 1 个文档中出现的词
-        vectorizer = TfidfVectorizer(max_df=0.9, min_df=2, max_features=20000)
+        vectorizer = TfidfVectorizer(stop_words=stop_words, max_df=0.9, min_df=2, max_features=20000)
         tfidf_matrix = vectorizer.fit_transform(corpus)
         
         # 获取词表
