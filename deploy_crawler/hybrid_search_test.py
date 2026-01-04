@@ -36,6 +36,13 @@ def ultra_clean_query(query):
     # 如果全被过滤了，保底返回原词
     return cleaned if cleaned else words
 
+def get_embedding(text_input):
+    """调用 API 获取查询词的向量"""
+    headers = {"Authorization": f"Bearer {GUIJI_API_KEY}", "Content-Type": "application/json"}
+    payload = {"model": GUIJI_EMB_MODEL, "input": text_input, "encoding_format": "float"}
+    resp = requests.post(GUIJI_EMB_URL, headers=headers, json=payload, timeout=10)
+    return resp.json()['data'][0]['embedding']
+
 # 2. LLM 配置 (意图路由)
 LONGMAO_API_KEY = os.getenv("LONGMAO_API_KEY")
 LONGMAO_BASE_URL = os.getenv("LONGMAO_BASE_URL")
