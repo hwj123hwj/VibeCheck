@@ -56,7 +56,7 @@ def ai_intent_router(query):
 1. artist: 提取歌手名，没有则为 null。
 2. title: 提取歌名，没有则为 null。
 3. vibe: 提取纯粹的心情、场景或歌词描述，并统一转换为【简体中文】。
-4. type: "exact" (如果有明确歌手或歌名) 或 "vibe" (纯搜感觉)。
+4. type: "exact" (如果有明确歌手或歌名), "lyrics" (如果是歌词残句), "vibe" (纯搜感觉)。
 只输出 JSON。"""
     
     try:
@@ -78,10 +78,19 @@ def hybrid_search(user_query, top_k=5):
     intent = ai_intent_router(user_query)
     print(f"\n🤖 AI 路由结果: {intent}")
     
-    # 动态设定权重
-    # 如果是 exact 类型，理性权重占 0.8；如果是 vibe 类型，感性向量占 0.8
-    v_weight = 0.2 if intent['type'] == 'exact' else 0.7
-    r_weight = 1.0 - v_weight
+    # 分配三路权重
+    if intent['type'] == 'lyrics':
+        w_review = 0.2
+        w_lyrics = 0.6
+        w_rat = 0.2
+    elif intent['type'] == 'exact':
+        w_review = 0.1
+        w_lyrics = 0.1
+        w_rat = 0.8
+    else: # vibe
+        w_review = 0.6
+        w_lyrics = 0.2
+        w_rat = 0.2
     
     # 纯化向量搜索词
     vibe_query = intent['vibe'] if intent['vibe'] else user_query
@@ -89,12 +98,13 @@ def hybrid_search(user_query, top_k=5):
     
     session = Session()
     try:
-        # --- 2. 混合 SQL 6.0 ---
+        # --- 2. 混合 SQL 7.0 (双向量召回) ---
         search_sql = text("""
             WITH scoring_pool AS (
                 SELECT 
-                    id, title, artist, vibe_tags, review_text,
-                    (1 - (review_vector <=> CAST(:q_vec AS vector))) as semantic_score,
+                    id, title, artist, vibe_tags, review_text, core_lyrics,
+                    (1 - (review_vector <=> CAST(:q_vec AS vector))) as review_score,
+                    COALESCE(1 - (lyrics_vector <=> CAST(:q_vec AS vector)), 0) as lyrics_score,
                     (
                       CASE WHEN artist ILIKE :artist_q THEN 4.0 ELSE 0 END + 
                       CASE WHEN title ILIKE :title_q THEN 3.0 ELSE 0 END + 
@@ -105,9 +115,9 @@ def hybrid_search(user_query, top_k=5):
                 WHERE review_vector IS NOT NULL
             )
             SELECT *,
-                   (semantic_score * :v_w + (CASE WHEN rational_score > 4 THEN 4 ELSE rational_score END / 4.0) * :r_w) as final_score
+                   (review_score * :w_rev + lyrics_score * :w_lyr + (CASE WHEN rational_score > 4 THEN 4 ELSE rational_score END / 4.0) * :w_rat) as final_score
             FROM scoring_pool
-            WHERE semantic_score > 0.4
+            WHERE review_score > 0.4 OR lyrics_score > 0.4
             ORDER BY final_score DESC
             LIMIT :limit
         """)
@@ -121,16 +131,19 @@ def hybrid_search(user_query, top_k=5):
             "ts_q": ts_query,
             "artist_q": f"%{intent['artist']}%" if intent['artist'] else "%NONE%",
             "title_q": f"%{intent['title']}%" if intent['title'] else "%NONE%",
-            "v_w": v_weight,
-            "r_w": r_weight,
+            "w_rev": w_review,
+            "w_lyr": w_lyrics,
+            "w_rat": w_rat,
             "limit": top_k
         }).fetchall()
         
-        print(f"\n🎯 AI 智能驱动检索 (权重: 感性{v_weight*100}% + 理性{r_weight*100}%):")
+        print(f"\n🎯 AI 智能双向量检索 (权重: 意向{w_review*100}% | 台词{w_lyrics*100}% | 理性{w_rat*100}%):")
         print("=" * 80)
         for i, row in enumerate(results):
             print(f"{i+1}. 【{row.title}】 - {row.artist}")
-            print(f"   📊 权重分析: 语义({row.semantic_score:.3f}) | 匹配({row.rational_score:.3f})")
+            print(f"   📊 深度分析: 意向({row.review_score:.3f}) | 台词({row.lyrics_score:.3f}) | 匹配({row.rational_score:.3f})")
+            if row.core_lyrics:
+                print(f"   💡 精华金句: {row.core_lyrics[:75]}...")
             print(f"   📝 AI 评语: {row.review_text[:75]}...")
             print("-" * 80)
             
