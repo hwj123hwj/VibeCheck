@@ -41,6 +41,10 @@ class Song(Base):
     # BAAI/bge-m3 output dimension is 1024
     review_vector = Column(Vector(1024), comment='评语 Embedding 向量')
     
+    # 精华歌词与向量
+    core_lyrics = Column(Text, comment='AI或规律算法提取的歌曲精华歌词/副歌')
+    lyrics_vector = Column(Vector(1024), comment='精华歌词的语义向量索引')
+    
     # TF-IDF 向量 (使用 JSONB 存储稀疏矩阵或索引)
     tfidf_vector = Column(JSONB, comment='TF-IDF 向量 (JSON)')
     
