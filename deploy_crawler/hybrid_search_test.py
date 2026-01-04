@@ -16,11 +16,19 @@ engine = create_engine(get_db_url())
 Session = sessionmaker(bind=engine)
 
 # 扩展停用词库
+STOPWORDS_PATH = "stopwords.txt"
 EXTENDED_STOP_WORDS = {"一首歌", "的一首", "一种", "的一", "对于", "关于", "我想", "听听", "的", "了", "在", "，", "。", "！", "？", " ", "”", "“", "歌"}
 if os.path.exists(STOPWORDS_PATH):
     with open(STOPWORDS_PATH, "r", encoding="utf-8") as f:
         for line in f:
             EXTENDED_STOP_WORDS.add(line.strip())
+
+def get_embedding(text_input):
+    """调用 API 获取查询词的向量"""
+    headers = {"Authorization": f"Bearer {GUIJI_API_KEY}", "Content-Type": "application/json"}
+    payload = {"model": GUIJI_EMB_MODEL, "input": text_input, "encoding_format": "float"}
+    resp = requests.post(GUIJI_EMB_URL, headers=headers, json=payload, timeout=10)
+    return resp.json()['data'][0]['embedding']
 
 def deep_clean_query(query):
     """极其激进的查询词净化"""
