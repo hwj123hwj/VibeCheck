@@ -36,40 +36,53 @@ def ultra_clean_query(query):
     # 如果全被过滤了，保底返回原词
     return cleaned if cleaned else words
 
-def get_embedding(text_input):
-    """调用 API 获取查询词的向量"""
-    headers = {"Authorization": f"Bearer {GUIJI_API_KEY}", "Content-Type": "application/json"}
-    payload = {"model": GUIJI_EMB_MODEL, "input": text_input, "encoding_format": "float"}
-    resp = requests.post(GUIJI_EMB_URL, headers=headers, json=payload, timeout=10)
-    return resp.json()['data'][0]['embedding']
+# 2. LLM 配置 (意图路由)
+LONGMAO_API_KEY = os.getenv("LONGMAO_API_KEY")
+LONGMAO_BASE_URL = os.getenv("LONGMAO_BASE_URL")
+LONGMAO_MODEL = os.getenv("LONGMAO_MODEL", "LongCat-Flash-Chat")
 
-def deep_clean_query(query):
-    """极其激进的查询词净化"""
-    words = jieba.lcut(query)
-    # 过滤掉停用词，且只要长度大于1的实词，除非是特定的歌手名/歌名
-    cleaned = [w for w in words if w not in EXTENDED_STOP_WORDS and len(w.strip()) > 0]
-    return cleaned if cleaned else words
+def ai_intent_router(query):
+    """使用 LLM 识别用户意图，拆解歌手/歌名/意境"""
+    prompt = f"""你是一个音乐搜索意图解析引擎。请将用户的输入拆解为 JSON 格式。
+输入："{query}"
+要求：
+1. artist: 提取歌手名，没有则为 null。
+2. title: 提取歌名，没有则为 null。
+3. vibe: 提取纯粹的心情、场景或故事描述。
+4. type: "exact" (如果有明确歌手或歌名) 或 "vibe" (纯搜感觉)。
+只输出 JSON。"""
+    
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=LONGMAO_API_KEY, base_url=LONGMAO_BASE_URL)
+        response = client.chat.completions.create(
+            model=LONGMAO_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        import json
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        print(f"⚠️ AI 路由不可用，切换回基础模式: {e}")
+        return {"artist": None, "title": None, "vibe": query, "type": "vibe"}
 
 def hybrid_search(user_query, top_k=5):
-    print(f"\n🚀 正在进行 5.0 极致语境检索...")
+    # --- 1. AI 意图路由 ---
+    intent = ai_intent_router(user_query)
+    print(f"\n🤖 AI 路由结果: {intent}")
     
-    # --- 1. 深度拆解 ---
-    cleaned_words = ultra_clean_query(user_query)
-    print(f"  🔍 提取核心意境词: {cleaned_words}")
+    # 动态设定权重
+    # 如果是 exact 类型，理性权重占 0.8；如果是 vibe 类型，感性向量占 0.8
+    v_weight = 0.2 if intent['type'] == 'exact' else 0.7
+    r_weight = 1.0 - v_weight
     
-    # 策略：识别脱水后的第一个词是否为歌手/歌名关键词
-    artist_key = cleaned_words[0] if cleaned_words else ""
-    # 纯化意境 Query：把查询词里所有的动作和歌手都删掉，只留剩下的意向
-    vibe_words = [w for w in cleaned_words if w != artist_key]
-    vibe_query = " ".join(vibe_words) if vibe_words else user_query
-    
-    # --- 2. 纯净向量化 (只搜意境) ---
-    print(f"  🧠 语义对齐目标: \"{vibe_query}\"")
+    # 纯化向量搜索词
+    vibe_query = intent['vibe'] if intent['vibe'] else user_query
     query_vec = get_embedding(vibe_query)
     
     session = Session()
     try:
-        # --- 3. 混合 SQL 5.1 (修复版) ---
+        # --- 2. 混合 SQL 6.0 ---
         search_sql = text("""
             WITH scoring_pool AS (
                 SELECT 
@@ -77,7 +90,7 @@ def hybrid_search(user_query, top_k=5):
                     (1 - (review_vector <=> CAST(:q_vec AS vector))) as semantic_score,
                     (
                       CASE WHEN artist ILIKE :artist_q THEN 4.0 ELSE 0 END + 
-                      CASE WHEN title = :title_exact THEN 2.0 ELSE 0 END + 
+                      CASE WHEN title ILIKE :title_q THEN 3.0 ELSE 0 END + 
                       ts_rank_cd(to_tsvector('simple', title || ' ' || artist || ' ' || segmented_lyrics), 
                                to_tsquery('simple', :ts_q))
                     ) as rational_score
@@ -85,32 +98,32 @@ def hybrid_search(user_query, top_k=5):
                 WHERE review_vector IS NOT NULL
             )
             SELECT *,
-                   (semantic_score * 0.4 + (CASE WHEN rational_score > 4 THEN 4 ELSE rational_score END / 4.0) * 0.6) as final_score
+                   (semantic_score * :v_w + (CASE WHEN rational_score > 4 THEN 4 ELSE rational_score END / 4.0) * :r_w) as final_score
             FROM scoring_pool
-            WHERE semantic_score > 0.4 -- 只要有三分像就放进来，由排序决定谁靠前
+            WHERE semantic_score > 0.4
             ORDER BY final_score DESC
             LIMIT :limit
         """)
         
+        # 将输入分词用于关键词搜索
+        cleaned_words = ultra_clean_query(user_query)
         ts_query = " | ".join(cleaned_words)
-        
-        # 改进：只有当词像是一个名字时才作为 artist_q
-        # 这里简单处理：如果 user_query 里确实带了这个词，且它可能是歌手
-        artist_q = f"%{artist_key}%" if artist_key and len(artist_key) > 1 else "%NONE%"
 
         results = session.execute(search_sql, {
             "q_vec": str(query_vec), 
             "ts_q": ts_query,
-            "artist_q": artist_q,
-            "title_exact": artist_key,
+            "artist_q": f"%{intent['artist']}%" if intent['artist'] else "%NONE%",
+            "title_q": f"%{intent['title']}%" if intent['title'] else "%NONE%",
+            "v_w": v_weight,
+            "r_w": r_weight,
             "limit": top_k
         }).fetchall()
         
-        print(f"\n🎯 检索结果 (语义纯化 + 歌手强绑定):")
+        print(f"\n🎯 AI 智能驱动检索 (权重: 感性{v_weight*100}% + 理性{r_weight*100}%):")
         print("=" * 80)
         for i, row in enumerate(results):
             print(f"{i+1}. 【{row.title}】 - {row.artist}")
-            print(f"   📊 深度分析: 语义({row.semantic_score:.3f}) | 匹配({row.rational_score:.3f})")
+            print(f"   📊 权重分析: 语义({row.semantic_score:.3f}) | 匹配({row.rational_score:.3f})")
             print(f"   📝 AI 评语: {row.review_text[:75]}...")
             print("-" * 80)
             
