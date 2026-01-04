@@ -28,10 +28,14 @@ services:
       DB_USER: root
       DB_PASSWORD: 15671040800q
       DB_NAME: music_db
-      # LLM 接口配置
+      # LLM 接口配置 (感性分析)
       LONGMAO_API_KEY: "ak_1hb78c5hG3Oe7IQ1VM1nj58T2o373"
       LONGMAO_BASE_URL: "https://api.longcat.chat/openai"
       LONGMAO_MODEL: "LongCat-Flash-Chat"
+      # 硅基流动配置 (语义向量化)
+      GUIJI_API_KEY: "sk-pjgenkdeoudivpnruwhnkysilysvgpurseenmmrvqgntxela"
+      GUIJI_EMB_URL: "https://api.siliconflow.cn/v1/embeddings"
+      GUIJI_EMB_MODEL: "BAAI/bge-m3"
     tty: true
     command: tail -f /dev/null
 
