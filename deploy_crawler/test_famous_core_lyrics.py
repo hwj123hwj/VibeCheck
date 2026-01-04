@@ -14,10 +14,10 @@ def test_famous():
         
         print(f"🚀 --- 明星曲目精华提取效果测试 ---")
         for title in target_songs:
-            # 模糊查询这首歌
+            # 精确查询这首歌
             song = session.execute(
-                text("SELECT title, artist, lyrics FROM songs WHERE title LIKE :t LIMIT 1"),
-                {"t": f"%{title}%"}
+                text("SELECT title, artist, lyrics FROM songs WHERE title = :t LIMIT 1"),
+                {"t": title}
             ).fetchone()
             
             if song:
