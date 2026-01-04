@@ -49,13 +49,13 @@ LONGMAO_BASE_URL = os.getenv("LONGMAO_BASE_URL")
 LONGMAO_MODEL = os.getenv("LONGMAO_MODEL", "LongCat-Flash-Chat")
 
 def ai_intent_router(query):
-    """使用 LLM 识别用户意图，拆解歌手/歌名/意境"""
+    """使用 LLM 识别用户意图，并统一转化为简体中文"""
     prompt = f"""你是一个音乐搜索意图解析引擎。请将用户的输入拆解为 JSON 格式。
 输入："{query}"
 要求：
 1. artist: 提取歌手名，没有则为 null。
 2. title: 提取歌名，没有则为 null。
-3. vibe: 提取纯粹的心情、场景或故事描述。
+3. vibe: 提取纯粹的心情、场景或歌词描述，并统一转换为【简体中文】。
 4. type: "exact" (如果有明确歌手或歌名) 或 "vibe" (纯搜感觉)。
 只输出 JSON。"""
     
