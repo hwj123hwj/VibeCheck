@@ -31,6 +31,10 @@ def batch_update_core_lyrics():
             # 3. 批量处理并更新
             for s in songs:
                 core = extract_chorus(s.lyrics)
+                # 核心修复：如果提取结果为空，存入标记字符防止死循环
+                if not core or core.strip() == "":
+                    core = "[N/A]"
+                
                 session.execute(
                     text("UPDATE songs SET core_lyrics = :core WHERE id = :id"),
                     {"core": core, "id": s.id}
