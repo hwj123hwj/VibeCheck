@@ -28,6 +28,13 @@ def clean_query(query):
     cleaned = [w for w in words if w not in STOP_WORDS and len(w.strip()) > 0]
     return cleaned if cleaned else words
 
+def get_embedding(text_input):
+    """调用 API 获取查询词的向量"""
+    headers = {"Authorization": f"Bearer {GUIJI_API_KEY}", "Content-Type": "application/json"}
+    payload = {"model": GUIJI_EMB_MODEL, "input": text_input, "encoding_format": "float"}
+    resp = requests.post(GUIJI_EMB_URL, headers=headers, json=payload, timeout=10)
+    return resp.json()['data'][0]['embedding']
+
 def hybrid_search(user_query, top_k=5):
     print(f"\n🚀 正在进行 3.0 深度混合检索: \"{user_query}\"...")
     
