@@ -23,6 +23,19 @@ if os.path.exists(STOPWORDS_PATH):
         for line in f:
             EXTENDED_STOP_WORDS.add(line.strip())
 
+# 终极脱水词库 (严禁进入语义分析)
+ULTRA_STOP_WORDS = {
+    "想听", "给我", "推荐", "一首", "有些", "听听", "有关", "关于", "那些", "的", "了", "在", "我", "你", "他", "她", "，", "。", "！", "？", " ", "”", "“", "歌", "适合", "那种", "一种"
+}
+
+def ultra_clean_query(query):
+    """只保留最具意境的实词"""
+    words = jieba.lcut(query)
+    # 彻底排除单字（除了特定的如'雨'、'愁'这种），排除超强停用词
+    cleaned = [w for w in words if w not in ULTRA_STOP_WORDS and len(w.strip()) > 1]
+    # 如果全被过滤了，保底返回原词
+    return cleaned if cleaned else words
+
 def get_embedding(text_input):
     """调用 API 获取查询词的向量"""
     headers = {"Authorization": f"Bearer {GUIJI_API_KEY}", "Content-Type": "application/json"}
@@ -38,34 +51,33 @@ def deep_clean_query(query):
     return cleaned if cleaned else words
 
 def hybrid_search(user_query, top_k=5):
-    print(f"\n🚀 正在进行 4.0 意图识别混合检索...")
+    print(f"\n🚀 正在进行 5.0 极致语境检索...")
     
-    # --- 1. 拆解意图 ---
-    cleaned_words = deep_clean_query(user_query)
-    print(f"  🔍 识别核心意图: {cleaned_words}")
+    # --- 1. 深度拆解 ---
+    cleaned_words = ultra_clean_query(user_query)
+    print(f"  🔍 提取核心意境词: {cleaned_words}")
     
-    # 尝试提取歌手名 (这里简单地认为第一个词可能是歌手)
-    potential_artist = cleaned_words[0] if cleaned_words else ""
-    # 提取纯意境词 (去掉歌手名) 
-    vibe_query = "".join(cleaned_words[1:]) if len(cleaned_words) > 1 else user_query
+    # 策略：识别脱水后的第一个词是否为歌手/歌名关键词
+    artist_key = cleaned_words[0] if cleaned_words else ""
+    # 纯化意境 Query：把查询词里所有的动作和歌手都删掉，只留剩下的意向
+    vibe_words = [w for w in cleaned_words if w != artist_key]
+    vibe_query = " ".join(vibe_words) if vibe_words else user_query
     
-    # --- 2. 获取向量 (只拿意境部分去搜语义，防止歌手名干扰) ---
+    # --- 2. 纯净向量化 (只搜意境) ---
     print(f"  🧠 语义对齐目标: \"{vibe_query}\"")
     query_vec = get_embedding(vibe_query)
     
     session = Session()
     try:
-        # --- 3. 混合 SQL 4.0 ---
-        # 引入【标题关键词命中】的爆炸加分策略
+        # --- 3. 混合 SQL 5.0 ---
         search_sql = text("""
             WITH scoring_pool AS (
                 SELECT 
                     id, title, artist, vibe_tags, review_text,
                     (1 - (review_vector <=> CAST(:q_vec AS vector))) as semantic_score,
-                    -- 理性匹配逻辑
                     (
-                      CASE WHEN artist ILIKE :artist_q THEN 3.0 ELSE 0 END + -- 歌手匹配给最高优先级
-                      CASE WHEN title ILIKE :vibe_first THEN 1.5 ELSE 0 END + -- 标题命中关键动作给高分
+                      CASE WHEN artist ILIKE :artist_q THEN 4.0 ELSE 0 END + -- 加大歌手权重到 4.0
+                      CASE WHEN title = :title_exact THEN 2.0 ELSE 0 END + -- 只有完全相等才给标题加分
                       ts_rank_cd(to_tsvector('simple', title || ' ' || segmented_lyrics), 
                                to_tsquery('simple', :ts_q))
                     ) as rational_score
@@ -73,31 +85,31 @@ def hybrid_search(user_query, top_k=5):
                 WHERE review_vector IS NOT NULL
             )
             SELECT *,
-                   (semantic_score * 0.5 + (CASE WHEN rational_score > 3 THEN 3 ELSE rational_score END / 3.0) * 0.5) as final_score
+                   (semantic_score * 0.4 + (CASE WHEN rational_score > 4 THEN 4 ELSE rational_score END / 4.0) * 0.6) as final_score
             FROM scoring_pool
-            WHERE artist ILIKE :artist_q OR semantic_score > 0.5 -- 缩小范围，梁静茹优先
+            WHERE 
+                (artist ILIKE :artist_q AND semantic_score > 0.4) -- 只要提了歌手名，就必须从他的歌里找最像的
+                OR (:artist_q = '%%' AND semantic_score > 0.6)   -- 没提歌手名，则全库大搜捕
             ORDER BY final_score DESC
             LIMIT :limit
         """)
         
-        # 将脱水后的词连成 tsquery
         ts_query = " | ".join(cleaned_words)
-        vibe_first = f"%{cleaned_words[1]}%" if len(cleaned_words) > 1 else "%NONE%"
 
         results = session.execute(search_sql, {
             "q_vec": str(query_vec), 
             "ts_q": ts_query,
-            "artist_q": f"%{potential_artist}%",
-            "vibe_first": vibe_first,
+            "artist_q": f"%{artist_key}%" if artist_key else "%%",
+            "title_exact": artist_key, # 尝试看第一个词是不是标题
             "limit": top_k
         }).fetchall()
         
-        print(f"\n🎯 智能检索结果 (歌手权重补正 + 语义对齐):")
+        print(f"\n🎯 检索结果 (语义纯化 + 歌手强绑定):")
         print("=" * 80)
         for i, row in enumerate(results):
             print(f"{i+1}. 【{row.title}】 - {row.artist}")
-            print(f"   📊 权重分析: 语义({row.semantic_score:.3f}) + 命中({row.rational_score:.3f}) -> 综分:{row.final_score:.4f}")
-            print(f"   📝 AI 评语: {row.review_text[:70]}...")
+            print(f"   📊 深度分析: 语义({row.semantic_score:.3f}) | 匹配({row.rational_score:.3f})")
+            print(f"   📝 AI 评语: {row.review_text[:75]}...")
             print("-" * 80)
             
     finally:
