@@ -15,83 +15,82 @@ GUIJI_EMB_MODEL = os.getenv("GUIJI_EMB_MODEL", "BAAI/bge-m3")
 engine = create_engine(get_db_url())
 Session = sessionmaker(bind=engine)
 
-# 加载停用词
-STOP_WORDS = set()
-STOPWORDS_PATH = "stopwords.txt"
+# 扩展停用词库
+EXTENDED_STOP_WORDS = {"一首歌", "的一首", "一种", "的一", "对于", "关于", "我想", "听听", "的", "了", "在", "，", "。", "！", "？", " ", "”", "“", "歌"}
 if os.path.exists(STOPWORDS_PATH):
     with open(STOPWORDS_PATH, "r", encoding="utf-8") as f:
-        STOP_WORDS = {line.strip() for line in f if line.strip()}
+        for line in f:
+            EXTENDED_STOP_WORDS.add(line.strip())
 
-def clean_query(query):
-    """剔除查询词中的废话"""
+def deep_clean_query(query):
+    """极其激进的查询词净化"""
     words = jieba.lcut(query)
-    cleaned = [w for w in words if w not in STOP_WORDS and len(w.strip()) > 0]
+    # 过滤掉停用词，且只要长度大于1的实词，除非是特定的歌手名/歌名
+    cleaned = [w for w in words if w not in EXTENDED_STOP_WORDS and len(w.strip()) > 0]
     return cleaned if cleaned else words
 
-def get_embedding(text_input):
-    """调用 API 获取查询词的向量"""
-    headers = {"Authorization": f"Bearer {GUIJI_API_KEY}", "Content-Type": "application/json"}
-    payload = {"model": GUIJI_EMB_MODEL, "input": text_input, "encoding_format": "float"}
-    resp = requests.post(GUIJI_EMB_URL, headers=headers, json=payload, timeout=10)
-    return resp.json()['data'][0]['embedding']
-
 def hybrid_search(user_query, top_k=5):
-    print(f"\n🚀 正在进行 3.0 深度混合检索: \"{user_query}\"...")
+    print(f"\n🚀 正在进行 4.0 意图识别混合检索...")
     
-    # --- 1. 查询词脱水 ---
-    cleaned_words = clean_query(user_query)
-    # 提取可能的歌手名（简单逻辑：如果词在 artist 列表里出现过）
-    # 这里我们暂且把所有脱水后的词都去匹配 artist 字段
-    ts_query = " | ".join(cleaned_words)
-    print(f"  🔍 核心检索词: {cleaned_words}")
+    # --- 1. 拆解意图 ---
+    cleaned_words = deep_clean_query(user_query)
+    print(f"  🔍 识别核心意图: {cleaned_words}")
     
-    # --- 2. 获取向量 ---
-    query_vec = get_embedding(user_query)
+    # 尝试提取歌手名 (这里简单地认为第一个词可能是歌手)
+    potential_artist = cleaned_words[0] if cleaned_words else ""
+    # 提取纯意境词 (去掉歌手名) 
+    vibe_query = "".join(cleaned_words[1:]) if len(cleaned_words) > 1 else user_query
+    
+    # --- 2. 获取向量 (只拿意境部分去搜语义，防止歌手名干扰) ---
+    print(f"  🧠 语义对齐目标: \"{vibe_query}\"")
+    query_vec = get_embedding(vibe_query)
     
     session = Session()
     try:
-        # --- 3. 增强版混合 SQL ---
-        # artist_boost: 如果歌手名匹配，权重翻倍
-        # semantic_score: 语义相似度
-        # rational_score: 关键词匹配（针对标题、歌手和歌词）
+        # --- 3. 混合 SQL 4.0 ---
+        # 引入【标题关键词命中】的爆炸加分策略
         search_sql = text("""
-            WITH base_scores AS (
+            WITH scoring_pool AS (
                 SELECT 
                     id, title, artist, vibe_tags, review_text,
                     (1 - (review_vector <=> CAST(:q_vec AS vector))) as semantic_score,
-                    -- 给标题和歌手极高的匹配权重
-                    (CASE WHEN artist ILIKE :q_raw THEN 2.0 ELSE 0 END +
-                     CASE WHEN title ILIKE :q_raw THEN 1.5 ELSE 0 END +
-                     ts_rank_cd(to_tsvector('simple', title || ' ' || artist || ' ' || segmented_lyrics), 
+                    -- 理性匹配逻辑
+                    (
+                      CASE WHEN artist ILIKE :artist_q THEN 3.0 ELSE 0 END + -- 歌手匹配给最高优先级
+                      CASE WHEN title ILIKE :vibe_first THEN 1.5 ELSE 0 END + -- 标题命中关键动作给高分
+                      ts_rank_cd(to_tsvector('simple', title || ' ' || segmented_lyrics), 
                                to_tsquery('simple', :ts_q))
                     ) as rational_score
                 FROM songs
                 WHERE review_vector IS NOT NULL
             )
             SELECT *,
-                   (semantic_score * 0.6 + (CASE WHEN rational_score > 2 THEN 2 ELSE rational_score END / 2.0) * 0.4) as final_score
-            FROM base_scores
+                   (semantic_score * 0.5 + (CASE WHEN rational_score > 3 THEN 3 ELSE rational_score END / 3.0) * 0.5) as final_score
+            FROM scoring_pool
+            WHERE artist ILIKE :artist_q OR semantic_score > 0.5 -- 缩小范围，梁静茹优先
             ORDER BY final_score DESC
             LIMIT :limit
         """)
         
-        # 为了让歌手匹配更准，我们取脱水词里最像人名的
-        potential_artist = f"%{cleaned_words[0]}%" if cleaned_words else f"%{user_query}%"
+        # 将脱水后的词连成 tsquery
+        ts_query = " | ".join(cleaned_words)
+        vibe_first = f"%{cleaned_words[1]}%" if len(cleaned_words) > 1 else "%NONE%"
 
         results = session.execute(search_sql, {
             "q_vec": str(query_vec), 
             "ts_q": ts_query,
-            "q_raw": potential_artist,
+            "artist_q": f"%{potential_artist}%",
+            "vibe_first": vibe_first,
             "limit": top_k
         }).fetchall()
         
-        print(f"\n🎯 深度排序结果 (感性 60% + 理性 40%):")
-        print("=" * 70)
+        print(f"\n🎯 智能检索结果 (歌手权重补正 + 语义对齐):")
+        print("=" * 80)
         for i, row in enumerate(results):
             print(f"{i+1}. 【{row.title}】 - {row.artist}")
-            print(f"   📊 综合得分: {row.final_score:.4f} [语义:{row.semantic_score:.3f} | 匹配:{row.rational_score:.3f}]")
-            print(f"   📝 AI 评语: {row.review_text[:65]}...")
-            print("-" * 70)
+            print(f"   📊 权重分析: 语义({row.semantic_score:.3f}) + 命中({row.rational_score:.3f}) -> 综分:{row.final_score:.4f}")
+            print(f"   📝 AI 评语: {row.review_text[:70]}...")
+            print("-" * 80)
             
     finally:
         session.close()
