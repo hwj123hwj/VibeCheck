@@ -69,16 +69,16 @@ def hybrid_search(user_query, top_k=5):
     
     session = Session()
     try:
-        # --- 3. 混合 SQL 5.0 ---
+        # --- 3. 混合 SQL 5.1 (修复版) ---
         search_sql = text("""
             WITH scoring_pool AS (
                 SELECT 
                     id, title, artist, vibe_tags, review_text,
                     (1 - (review_vector <=> CAST(:q_vec AS vector))) as semantic_score,
                     (
-                      CASE WHEN artist ILIKE :artist_q THEN 4.0 ELSE 0 END + -- 加大歌手权重到 4.0
-                      CASE WHEN title = :title_exact THEN 2.0 ELSE 0 END + -- 只有完全相等才给标题加分
-                      ts_rank_cd(to_tsvector('simple', title || ' ' || segmented_lyrics), 
+                      CASE WHEN artist ILIKE :artist_q THEN 4.0 ELSE 0 END + 
+                      CASE WHEN title = :title_exact THEN 2.0 ELSE 0 END + 
+                      ts_rank_cd(to_tsvector('simple', title || ' ' || artist || ' ' || segmented_lyrics), 
                                to_tsquery('simple', :ts_q))
                     ) as rational_score
                 FROM songs
@@ -87,20 +87,22 @@ def hybrid_search(user_query, top_k=5):
             SELECT *,
                    (semantic_score * 0.4 + (CASE WHEN rational_score > 4 THEN 4 ELSE rational_score END / 4.0) * 0.6) as final_score
             FROM scoring_pool
-            WHERE 
-                (artist ILIKE :artist_q AND semantic_score > 0.4) -- 只要提了歌手名，就必须从他的歌里找最像的
-                OR (:artist_q = '%%' AND semantic_score > 0.6)   -- 没提歌手名，则全库大搜捕
+            WHERE semantic_score > 0.4 -- 只要有三分像就放进来，由排序决定谁靠前
             ORDER BY final_score DESC
             LIMIT :limit
         """)
         
         ts_query = " | ".join(cleaned_words)
+        
+        # 改进：只有当词像是一个名字时才作为 artist_q
+        # 这里简单处理：如果 user_query 里确实带了这个词，且它可能是歌手
+        artist_q = f"%{artist_key}%" if artist_key and len(artist_key) > 1 else "%NONE%"
 
         results = session.execute(search_sql, {
             "q_vec": str(query_vec), 
             "ts_q": ts_query,
-            "artist_q": f"%{artist_key}%" if artist_key else "%%",
-            "title_exact": artist_key, # 尝试看第一个词是不是标题
+            "artist_q": artist_q,
+            "title_exact": artist_key,
             "limit": top_k
         }).fetchall()
         
