@@ -15,59 +15,76 @@ GUIJI_EMB_MODEL = os.getenv("GUIJI_EMB_MODEL", "BAAI/bge-m3")
 engine = create_engine(get_db_url())
 Session = sessionmaker(bind=engine)
 
-def get_embedding(text_input):
-    """调用 API 获取查询词的向量"""
-    headers = {"Authorization": f"Bearer {GUIJI_API_KEY}", "Content-Type": "application/json"}
-    payload = {"model": GUIJI_EMB_MODEL, "input": text_input, "encoding_format": "float"}
-    resp = requests.post(GUIJI_EMB_URL, headers=headers, json=payload, timeout=10)
-    return resp.json()['data'][0]['embedding']
+# 加载停用词
+STOP_WORDS = set()
+STOPWORDS_PATH = "stopwords.txt"
+if os.path.exists(STOPWORDS_PATH):
+    with open(STOPWORDS_PATH, "r", encoding="utf-8") as f:
+        STOP_WORDS = {line.strip() for line in f if line.strip()}
+
+def clean_query(query):
+    """剔除查询词中的废话"""
+    words = jieba.lcut(query)
+    cleaned = [w for w in words if w not in STOP_WORDS and len(w.strip()) > 0]
+    return cleaned if cleaned else words
 
 def hybrid_search(user_query, top_k=5):
-    print(f"\n� 正在进行 2.0 混合检索: \"{user_query}\"...")
+    print(f"\n🚀 正在进行 3.0 深度混合检索: \"{user_query}\"...")
     
-    # --- 1. 理性准备: 对查询词进行分词 ---
-    # 比如输入 "鲜花种在哪里" -> ["鲜花", "种", "在", "哪里"]
-    query_segs = jieba.lcut(user_query)
-    ts_query = " | ".join(query_segs) # 变成 "鲜花 | 种 | 在 | 哪里" 用于全文检索
+    # --- 1. 查询词脱水 ---
+    cleaned_words = clean_query(user_query)
+    # 提取可能的歌手名（简单逻辑：如果词在 artist 列表里出现过）
+    # 这里我们暂且把所有脱水后的词都去匹配 artist 字段
+    ts_query = " | ".join(cleaned_words)
+    print(f"  🔍 核心检索词: {cleaned_words}")
     
-    # --- 2. 感性准备: 获取向量 ---
+    # --- 2. 获取向量 ---
     query_vec = get_embedding(user_query)
     
     session = Session()
     try:
-        # --- 3. 混合 SQL 架构 ---
-        # semantic_score: 向量相似度 (0-1)
-        # rational_score: 关键词匹配度 (使用 ts_rank 计算)
-        # final_score: 综合加权排序
+        # --- 3. 增强版混合 SQL ---
+        # artist_boost: 如果歌手名匹配，权重翻倍
+        # semantic_score: 语义相似度
+        # rational_score: 关键词匹配（针对标题、歌手和歌词）
         search_sql = text("""
-            WITH search_results AS (
+            WITH base_scores AS (
                 SELECT 
                     id, title, artist, vibe_tags, review_text,
                     (1 - (review_vector <=> CAST(:q_vec AS vector))) as semantic_score,
-                    ts_rank_cd(to_tsvector('simple', segmented_lyrics), to_tsquery('simple', :ts_q)) as rational_score
+                    -- 给标题和歌手极高的匹配权重
+                    (CASE WHEN artist ILIKE :q_raw THEN 2.0 ELSE 0 END +
+                     CASE WHEN title ILIKE :q_raw THEN 1.5 ELSE 0 END +
+                     ts_rank_cd(to_tsvector('simple', title || ' ' || artist || ' ' || segmented_lyrics), 
+                               to_tsquery('simple', :ts_q))
+                    ) as rational_score
                 FROM songs
                 WHERE review_vector IS NOT NULL
             )
-            SELECT * ,
-                   (semantic_score * 0.7 + (CASE WHEN rational_score > 1 THEN 1 ELSE rational_score END) * 0.3) as final_score
-            FROM search_results
+            SELECT *,
+                   (semantic_score * 0.6 + (CASE WHEN rational_score > 2 THEN 2 ELSE rational_score END / 2.0) * 0.4) as final_score
+            FROM base_scores
             ORDER BY final_score DESC
             LIMIT :limit
         """)
         
+        # 为了让歌手匹配更准，我们取脱水词里最像人名的
+        potential_artist = f"%{cleaned_words[0]}%" if cleaned_words else f"%{user_query}%"
+
         results = session.execute(search_sql, {
             "q_vec": str(query_vec), 
             "ts_q": ts_query,
+            "q_raw": potential_artist,
             "limit": top_k
         }).fetchall()
         
-        print(f"\n🎯 综合排序结果 (感性 70% + 理性 30%):")
-        print("=" * 60)
+        print(f"\n🎯 深度排序结果 (感性 60% + 理性 40%):")
+        print("=" * 70)
         for i, row in enumerate(results):
             print(f"{i+1}. 【{row.title}】 - {row.artist}")
-            print(f"   📊 综合得分: {row.final_score:.4f} [语义:{row.semantic_score:.3f} | 关键词:{row.rational_score:.3f}]")
-            print(f"   📝 AI 评语: {row.review_text[:60]}...")
-            print("-" * 60)
+            print(f"   📊 综合得分: {row.final_score:.4f} [语义:{row.semantic_score:.3f} | 匹配:{row.rational_score:.3f}]")
+            print(f"   📝 AI 评语: {row.review_text[:65]}...")
+            print("-" * 70)
             
     finally:
         session.close()
