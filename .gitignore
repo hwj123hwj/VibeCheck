@@ -8,3 +8,19 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment variables (API keys!)
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Data artifacts
+*.csv
+*.log
+data/
+
+# OS
+.DS_Store
+Thumbs.db
