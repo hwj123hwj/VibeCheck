@@ -24,6 +24,10 @@ async def get_similar_songs(
     if source.review_vector is None:
         return []
 
+    # pgvector 返回 numpy 数组，.tolist() 转为 Python 原生 float 列表
+    src_review_vec = str(source.review_vector.tolist())
+    src_lyrics_vec = str(source.lyrics_vector.tolist()) if source.lyrics_vector is not None else src_review_vec
+
     recommend_sql = sql_text("""
         SELECT
             id, title, artist, album_cover,
@@ -40,9 +44,6 @@ async def get_similar_songs(
             DESC
         LIMIT :limit
     """)
-
-    src_review_vec = str(list(source.review_vector)) if source.review_vector else None
-    src_lyrics_vec = str(list(source.lyrics_vector)) if source.lyrics_vector else src_review_vec
 
     rows = db.execute(recommend_sql, {
         "src_id": source.id,
