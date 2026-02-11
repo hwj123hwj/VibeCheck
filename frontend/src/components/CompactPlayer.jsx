@@ -119,12 +119,23 @@ const CompactPlayer = forwardRef(function CompactPlayer({ songId, title, artist,
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
-    <div className="rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] p-4">
+    <div style={{
+      borderRadius: 'var(--radius-xl)',
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border-subtle)',
+      padding: '1rem',
+      boxShadow: 'var(--shadow-sm)',
+    }}>
       <audio ref={audioRef} src={audioSrc} preload="metadata" />
 
       {/* VIP / 不可播放提示 */}
       {audioError && (
-        <div className="mb-3 flex items-center gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-400">
+        <div style={{
+          marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
+          borderRadius: 'var(--radius-sm)', background: 'var(--accent-yellow-light)',
+          border: '1px solid rgba(255, 200, 87, 0.3)',
+          padding: '0.5rem 0.75rem', fontSize: '0.75rem', color: '#B8860B',
+        }}>
           <Lock size={12} />
           <span>该歌曲暂不可播放（可能是 VIP 专属）</span>
         </div>
@@ -166,11 +177,15 @@ const CompactPlayer = forwardRef(function CompactPlayer({ songId, title, artist,
           <button
             onClick={togglePlay}
             disabled={audioError}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg ${
-              audioError
-                ? 'bg-gray-600 cursor-not-allowed opacity-50'
-                : 'bg-[var(--accent-pink)] hover:bg-[var(--accent-pink-dim)] shadow-[var(--accent-pink)]/20'
-            }`}
+            style={{
+              width: 40, height: 40, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s',
+              background: audioError ? '#ccc' : 'var(--accent-pink)',
+              cursor: audioError ? 'not-allowed' : 'pointer',
+              opacity: audioError ? 0.5 : 1,
+              boxShadow: audioError ? 'none' : 'var(--shadow-pink)',
+            }}
           >
             {isPlaying ? (
               <Pause size={18} className="text-white" fill="white" />

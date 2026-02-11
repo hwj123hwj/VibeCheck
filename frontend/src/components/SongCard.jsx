@@ -14,52 +14,147 @@ export default function SongCard({ song, index = 0 }) {
   return (
     <Link
       to={`/song/${song.id}`}
-      className="group block rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] overflow-hidden hover:border-[var(--accent-pink)]/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-[var(--accent-pink)]/5"
+      className="group card-soft"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        borderRadius: 'var(--radius-xl)',
+        overflow: 'hidden',
+        height: '100%',
+        textDecoration: 'none',
+        color: 'inherit',
+      }}
     >
       {/* Cover Area */}
-      <div className="relative aspect-square overflow-hidden bg-[var(--bg-elevated)]">
+      <div style={{ position: 'relative', aspectRatio: '1', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
         {coverUrl ? (
           <img
             src={coverUrl}
             alt={song.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              transition: 'transform 0.7s ease-out',
+            }}
+            className="group-hover:scale-105"
             loading="lazy"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Disc3 size={48} className="text-[var(--text-muted)] opacity-30" />
+          <div style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(135deg, var(--bg-secondary), var(--bg-elevated))',
+          }}>
+            <Disc3 size={40} style={{ color: 'var(--text-muted)', opacity: 0.2 }} />
           </div>
         )}
 
-        {/* Overlay on hover */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
-          <div className="w-12 h-12 rounded-full bg-[var(--accent-pink)] flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all duration-300 shadow-lg">
-            <Play size={20} className="text-white ml-0.5" fill="white" />
+        {/* Hover Play Overlay */}
+        <div
+          className="group-hover:opacity-100"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: 0,
+            transition: 'opacity 0.3s',
+            background: 'rgba(0,0,0,0.15)',
+          }}
+        >
+          <div style={{
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            background: 'var(--accent-pink)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: 'var(--shadow-pink)',
+            transform: 'scale(0.9)',
+            transition: 'transform 0.3s',
+          }}
+            className="group-hover:scale-100"
+          >
+            <Play size={20} color="white" fill="white" style={{ marginLeft: 2 }} />
           </div>
         </div>
 
-        {/* Score badge (for search results) */}
+        {/* Score badge (search results) */}
         {song.score > 0 && (
-          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-[var(--accent-pink)]/90 text-xs font-medium text-white backdrop-blur-sm">
+          <div style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            padding: '2px 8px',
+            borderRadius: 'var(--radius-full)',
+            background: 'rgba(255, 139, 167, 0.9)',
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            color: 'white',
+            backdropFilter: 'blur(4px)',
+          }}>
             {(song.score * 100).toFixed(0)}%
           </div>
         )}
       </div>
 
-      {/* Info */}
-      <div className="p-3.5">
-        <h3 className="text-sm font-semibold truncate text-[var(--text-primary)] group-hover:text-[var(--accent-pink)] transition-colors">
+      {/* Info — generous padding to avoid text clipping */}
+      <div style={{
+        padding: '0.875rem 1rem 1rem',
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.25rem',
+      }}>
+        <h3
+          className="group-hover:text-[var(--accent-pink)]"
+          style={{
+            fontSize: '0.875rem',
+            fontWeight: 700,
+            fontFamily: 'var(--font-serif)',
+            letterSpacing: '-0.01em',
+            lineHeight: 1.4,
+            color: 'var(--text-primary)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            transition: 'color 0.3s',
+          }}
+        >
           {song.title}
         </h3>
-        <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">{song.artist}</p>
+        <p style={{
+          fontSize: '0.75rem',
+          color: 'var(--text-secondary)',
+          fontWeight: 500,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {song.artist}
+        </p>
 
         {/* Vibe Tags */}
         {song.vibe_tags && song.vibe_tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginTop: '0.5rem' }}>
             {song.vibe_tags.slice(0, 3).map((tag, i) => (
               <span
                 key={i}
-                className="px-2 py-0.5 rounded-full text-[10px] bg-[var(--accent-pink)]/10 text-[var(--accent-pink)] border border-[var(--accent-pink)]/20"
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.625rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--text-secondary)',
+                }}
               >
                 {tag}
               </span>
@@ -69,11 +164,28 @@ export default function SongCard({ song, index = 0 }) {
 
         {/* Review snippet */}
         {song.review_text && (
-          <p className="mt-2 text-[11px] text-[var(--text-muted)] line-clamp-2 leading-relaxed font-[var(--font-serif)]" style={{ fontFamily: 'var(--font-serif)' }}>
-            {song.review_text}
-          </p>
+          <div style={{
+            marginTop: '0.5rem',
+            paddingTop: '0.5rem',
+            borderTop: '1px solid var(--border-subtle)',
+          }}>
+            <p style={{
+              fontSize: '0.6875rem',
+              color: 'var(--text-muted)',
+              lineHeight: 1.6,
+              fontStyle: 'italic',
+              fontFamily: 'var(--font-serif)',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}>
+              "{song.review_text}"
+            </p>
+          </div>
         )}
       </div>
     </Link>
   )
 }
+

@@ -19,23 +19,18 @@ export default function SongDetailPage() {
 
   useEffect(() => {
     let cancelled = false
-
     const load = async () => {
       setLoading(true)
       setSong(null)
       setLrcLines([])
       setRecommendations([])
-
       try {
-        // 并行请求：详情 + LRC + 推荐
         const [detail, lrc, rec] = await Promise.allSettled([
           getSongDetail(id),
           getSongLrc(id),
           getRecommendations(id, 6),
         ])
-
         if (cancelled) return
-
         if (detail.status === 'fulfilled') setSong(detail.value)
         if (lrc.status === 'fulfilled') setLrcLines(parseLrc(lrc.value.lrc))
         if (rec.status === 'fulfilled') setRecommendations(rec.value.recommendations || [])
@@ -45,29 +40,27 @@ export default function SongDetailPage() {
         if (!cancelled) setLoading(false)
       }
     }
-
     load()
     return () => { cancelled = true }
   }, [id])
 
-  // Scroll to top on song change
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [id])
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center">
-        <Loader2 size={32} className="animate-spin text-[var(--accent-pink)]" />
+      <div style={{ minHeight: 'calc(100vh - 8rem)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 size={32} className="animate-spin" style={{ color: 'var(--accent-pink)' }} />
       </div>
     )
   }
 
   if (!song) {
     return (
-      <div className="min-h-[calc(100vh-8rem)] flex flex-col items-center justify-center gap-4">
-        <p className="text-[var(--text-secondary)]">歌曲未找到</p>
-        <Link to="/" className="text-sm text-[var(--accent-pink)] hover:underline">
+      <div style={{ minHeight: 'calc(100vh - 8rem)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+        <p style={{ color: 'var(--text-secondary)' }}>歌曲未找到</p>
+        <Link to="/" style={{ fontSize: '0.875rem', color: 'var(--accent-pink)', textDecoration: 'none' }}>
           返回首页
         </Link>
       </div>
@@ -75,43 +68,57 @@ export default function SongDetailPage() {
   }
 
   return (
-    <div className="gradient-mesh min-h-[calc(100vh-8rem)]">
-      <div className="max-w-5xl mx-auto px-6 pt-8 pb-20">
+    <div className="gradient-mesh" style={{ minHeight: 'calc(100vh - 8rem)' }}>
+      <div className="page-container" style={{ maxWidth: '64rem', paddingTop: '2rem', paddingBottom: '5rem' }}>
         {/* Back Button */}
         <Link
           to={-1}
           onClick={(e) => { e.preventDefault(); window.history.back() }}
-          className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors mb-6"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+            fontSize: '0.875rem', color: 'var(--text-secondary)',
+            textDecoration: 'none', marginBottom: '1.5rem',
+            transition: 'color 0.2s',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
         >
           <ArrowLeft size={16} />
           返回
         </Link>
 
         {/* ── Main Content Grid ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-          {/* Left: Cover + Player + Info (2 cols) */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="detail-grid" style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 3fr)',
+          gap: '2.5rem',
+        }}>
+          {/* Left: Cover + Player + Info */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {/* Album Cover */}
-            <div className="relative aspect-square rounded-2xl overflow-hidden bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-2xl">
+            <div style={{
+              position: 'relative', aspectRatio: '1', borderRadius: 'var(--radius-xl)',
+              overflow: 'hidden', background: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)',
+              boxShadow: 'var(--shadow-lg)',
+            }}>
               {song.album_cover ? (
-                <img
-                  src={song.album_cover}
-                  alt={song.title}
-                  className="w-full h-full object-cover"
-                />
+                <img src={song.album_cover} alt={song.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-[var(--bg-elevated)]">
-                  <span className="text-6xl opacity-20">♪</span>
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-elevated)' }}>
+                  <span style={{ fontSize: '4rem', opacity: 0.15 }}>♪</span>
                 </div>
               )}
-              {/* Gradient overlay at bottom */}
-              <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[var(--bg-primary)]/80 to-transparent" />
+              <div style={{
+                position: 'absolute', left: 0, right: 0, bottom: 0, height: '33%',
+                background: 'linear-gradient(to top, rgba(255,252,245,0.8), transparent)',
+              }} />
             </div>
 
             {/* Song Meta */}
-            <div>
-              <h1 className="text-2xl font-bold">{song.title}</h1>
-              <p className="text-[var(--text-secondary)] mt-1">{song.artist}</p>
+            <div style={{ padding: '0 0.25rem' }}>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-serif)' }}>{song.title}</h1>
+              <p style={{ color: 'var(--text-secondary)', marginTop: '0.375rem', fontSize: '0.9375rem' }}>{song.artist}</p>
             </div>
 
             {/* Player */}
@@ -125,17 +132,25 @@ export default function SongDetailPage() {
 
             {/* Vibe Tags */}
             {song.vibe_tags && song.vibe_tags.length > 0 && (
-              <div>
-                <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <div style={{ padding: '0 0.25rem' }}>
+                <h3 style={{
+                  fontSize: '0.6875rem', color: 'var(--text-muted)',
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  marginBottom: '0.625rem', display: 'flex', alignItems: 'center', gap: '0.375rem',
+                }}>
                   <Tag size={12} />
                   氛围标签
                 </h3>
-                <div className="flex flex-wrap gap-2">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                   {song.vibe_tags.map((tag, i) => (
-                    <span
-                      key={i}
-                      className="px-3 py-1 rounded-full text-xs bg-[var(--accent-pink)]/10 text-[var(--accent-pink)] border border-[var(--accent-pink)]/20"
-                    >
+                    <span key={i} style={{
+                      padding: '0.25rem 0.75rem',
+                      borderRadius: 'var(--radius-full)',
+                      fontSize: '0.75rem',
+                      background: 'var(--accent-pink-light)',
+                      color: 'var(--accent-pink)',
+                      border: '1px solid rgba(255, 139, 167, 0.2)',
+                    }}>
                       {tag}
                     </span>
                   ))}
@@ -145,49 +160,56 @@ export default function SongDetailPage() {
 
             {/* Recommend Scene */}
             {song.recommend_scene && (
-              <div>
-                <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <div style={{ padding: '0 0.25rem' }}>
+                <h3 style={{
+                  fontSize: '0.6875rem', color: 'var(--text-muted)',
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  marginBottom: '0.625rem', display: 'flex', alignItems: 'center', gap: '0.375rem',
+                }}>
                   <MapPin size={12} />
                   推荐场景
                 </h3>
-                <p className="text-sm text-[var(--text-secondary)] leading-relaxed" style={{ fontFamily: 'var(--font-serif)' }}>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.7, fontFamily: 'var(--font-serif)' }}>
                   {song.recommend_scene}
                 </p>
               </div>
             )}
           </div>
 
-          {/* Right: Lyrics + Radar + Review (3 cols) */}
-          <div className="lg:col-span-3 space-y-6">
+          {/* Right: Lyrics + Radar + Review */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {/* Lyrics Scroller */}
-            <div className="rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] overflow-hidden">
-              <div className="px-4 pt-4 pb-2 border-b border-[var(--border-subtle)]">
-                <h3 className="text-sm font-medium text-[var(--text-secondary)]">歌词</h3>
+            <div style={{
+              borderRadius: 'var(--radius-xl)', background: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)', overflow: 'hidden',
+            }}>
+              <div style={{
+                padding: '1rem 1.25rem 0.625rem',
+                borderBottom: '1px solid var(--border-subtle)',
+              }}>
+                <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)' }}>歌词</h3>
               </div>
-              <LyricsScroller
-                lyrics={lrcLines}
-                audioRef={playerRef}
-              />
+              <LyricsScroller lyrics={lrcLines} audioRef={playerRef} />
             </div>
 
-            {/* Radar Chart + Review side-by-side on wider screens */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Radar Chart */}
+            {/* Radar Chart + Review */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem' }}>
               {song.vibe_scores && (
-                <div className="rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] p-4">
-                  <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">情感雷达</h3>
+                <div style={{
+                  borderRadius: 'var(--radius-xl)', background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)', padding: '1.25rem',
+                }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.625rem' }}>情感雷达</h3>
                   <VibeRadarChart scores={song.vibe_scores} />
                 </div>
               )}
-
-              {/* AI Review */}
               {song.review_text && (
-                <div className="rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] p-5">
-                  <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">AI 评语</h3>
-                  <p
-                    className="text-sm text-[var(--text-primary)] leading-relaxed"
-                    style={{ fontFamily: 'var(--font-serif)' }}
-                  >
+                <div style={{
+                  borderRadius: 'var(--radius-xl)', background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)', padding: '1.5rem',
+                }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>AI 评语</h3>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', lineHeight: 1.8, fontFamily: 'var(--font-serif)' }}>
                     {song.review_text}
                   </p>
                 </div>
@@ -196,12 +218,17 @@ export default function SongDetailPage() {
 
             {/* Core Lyrics */}
             {song.core_lyrics && (
-              <div className="rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] p-5">
-                <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">精华歌词</h3>
-                <blockquote
-                  className="text-sm text-[var(--text-primary)]/80 leading-loose border-l-2 border-[var(--accent-pink)]/40 pl-4 whitespace-pre-line"
-                  style={{ fontFamily: 'var(--font-serif)' }}
-                >
+              <div style={{
+                borderRadius: 'var(--radius-xl)', background: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)', padding: '1.5rem',
+              }}>
+                <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>精华歌词</h3>
+                <blockquote style={{
+                  fontSize: '0.875rem', color: 'var(--text-primary)',
+                  lineHeight: 2, borderLeft: '2px solid rgba(255, 139, 167, 0.4)',
+                  paddingLeft: '1rem', whiteSpace: 'pre-line',
+                  fontFamily: 'var(--font-serif)', opacity: 0.85,
+                }}>
                   {song.core_lyrics}
                 </blockquote>
               </div>
@@ -211,10 +238,14 @@ export default function SongDetailPage() {
 
         {/* ── Similar Recommendations ── */}
         {recommendations.length > 0 && (
-          <section className="mt-16">
-            <h2 className="text-xl font-bold mb-1">相似推荐</h2>
-            <p className="text-sm text-[var(--text-muted)] mb-6">基于评语向量 + 歌词向量的混合融合</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 stagger-children">
+          <section style={{ marginTop: '4rem' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-serif)', marginBottom: '0.375rem' }}>相似推荐</h2>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>基于评语向量 + 歌词向量的混合融合</p>
+            <div className="stagger-children" style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+              gap: '1rem',
+            }}>
               {recommendations.map((song, i) => (
                 <SongCard key={song.id} song={song} index={i} />
               ))}

@@ -49,17 +49,34 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div style={{ width: '100%', maxWidth: '42rem', marginLeft: 'auto', marginRight: 'auto' }}>
       {/* Search Bar */}
-      <form onSubmit={handleSubmit} className="relative">
-        <div className="relative group">
-          {/* Glow border on focus */}
-          <div className="absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-blue)] opacity-0 group-focus-within:opacity-30 blur transition-opacity duration-300" />
+      <form onSubmit={handleSubmit} style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }}>
 
-          <div className="relative flex items-center bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden group-focus-within:border-[var(--accent-pink)]/40 transition-colors">
-            <div className="pl-5 text-[var(--text-muted)]">
+          <div style={{
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-lg)',
+            overflow: 'hidden',
+            transition: 'border-color 0.3s, box-shadow 0.3s',
+          }}>
+            {/* Icon — absolutely positioned, never overlaps text */}
+            <div style={{
+              position: 'absolute',
+              left: '1.125rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: isLoading ? 'var(--accent-pink)' : 'var(--text-muted)',
+              pointerEvents: 'none',
+              display: 'flex',
+              alignItems: 'center',
+            }}>
               {isLoading ? (
-                <Loader2 size={20} className="animate-spin text-[var(--accent-pink)]" />
+                <Loader2 size={20} className="animate-spin" />
               ) : (
                 <Search size={20} />
               )}
@@ -70,13 +87,38 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="描述你想要的音乐氛围..."
-              className="flex-1 px-4 py-4 bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none text-base"
+              className="search-input-with-icon"
+              style={{
+                flex: 1,
+                paddingTop: '1rem',
+                paddingBottom: '1rem',
+                paddingRight: '1rem',
+                background: 'transparent',
+                color: 'var(--text-primary)',
+                fontSize: '1rem',
+                border: 'none',
+                outline: 'none',
+              }}
               disabled={isLoading}
             />
             <button
               type="submit"
               disabled={isLoading || !query.trim()}
-              className="mr-2 px-5 py-2 rounded-xl bg-[var(--accent-pink)] hover:bg-[var(--accent-pink-dim)] disabled:opacity-30 text-white text-sm font-medium transition-all"
+              style={{
+                marginRight: '0.5rem',
+                padding: '0.5rem 1.25rem',
+                borderRadius: 'var(--radius-md)',
+                background: isLoading || !query.trim() ? 'rgba(255,139,167,0.3)' : 'var(--accent-pink)',
+                color: 'white',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                border: 'none',
+                cursor: isLoading || !query.trim() ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => { if (!isLoading && query.trim()) e.currentTarget.style.background = 'var(--accent-pink-dim)' }}
+              onMouseLeave={(e) => { if (!isLoading && query.trim()) e.currentTarget.style.background = 'var(--accent-pink)' }}
             >
               {isLoading ? '解析中...' : '搜索'}
             </button>
@@ -86,18 +128,18 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
 
       {/* Intent Indicator */}
       {isLoading && (
-        <div className="mt-3 flex items-center justify-center gap-2 text-xs text-[var(--accent-pink)] animate-pulse">
+        <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--accent-pink)' }} className="animate-pulse">
           <Sparkles size={14} />
           <span>LLM 正在解析你的意图...</span>
         </div>
       )}
 
       {intentType && !isLoading && (
-        <div className="mt-3 flex items-center justify-center gap-2 text-xs text-[var(--text-secondary)]">
-          <Sparkles size={14} className="text-[var(--accent-pink)]" />
+        <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+          <Sparkles size={14} style={{ color: 'var(--accent-pink)' }} />
           <span>
             识别模式：
-            <span className="text-[var(--accent-pink)] font-medium ml-1">
+            <span style={{ color: 'var(--accent-pink)', fontWeight: 500, marginLeft: '0.25rem' }}>
               {intentLabels[intentType] || intentType}
             </span>
           </span>
@@ -106,12 +148,31 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
 
       {/* Example Prompts */}
       {!intentType && !isLoading && (
-        <div className="mt-5 flex flex-wrap justify-center gap-2">
+        <div style={{ marginTop: '1.25rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.5rem' }}>
           {examples.map((text, i) => (
             <button
               key={i}
               onClick={() => handleExample(text)}
-              className="px-3 py-1.5 rounded-full text-xs bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-pink)] hover:border-[var(--accent-pink)]/30 transition-colors"
+              style={{
+                padding: '0.375rem 0.875rem',
+                borderRadius: 'var(--radius-full)',
+                fontSize: '0.75rem',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                transition: 'all 0.25s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'var(--accent-pink)'
+                e.currentTarget.style.borderColor = 'rgba(255,139,167,0.3)'
+                e.currentTarget.style.background = 'var(--accent-pink-light)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--text-secondary)'
+                e.currentTarget.style.borderColor = 'var(--border-subtle)'
+                e.currentTarget.style.background = 'var(--bg-elevated)'
+              }}
             >
               {text}
             </button>
