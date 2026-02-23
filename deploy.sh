@@ -43,7 +43,13 @@ ensure_node() {
 }
 
 start_backend() {
-  if [ ! -d ".venv" ]; then
+  # If venv exists but is broken (partial create), recreate it.
+  if [ -d ".venv" ] && [ ! -f ".venv/bin/activate" ]; then
+    echo "[deploy] broken .venv detected, recreating..."
+    rm -rf .venv
+  fi
+
+  if [ ! -f ".venv/bin/activate" ]; then
     create_venv
   fi
 
