@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
+    # --- 搜索参数 ---
+    SEARCH_SCORE_THRESHOLD: float = 0.4  # 向量相似度最低阈值
+    SEARCH_WEIGHT_VIBE: dict = {"review": 0.6, "lyrics": 0.2, "rational": 0.2}
+    SEARCH_WEIGHT_LYRICS: dict = {"review": 0.2, "lyrics": 0.6, "rational": 0.2}
+    SEARCH_WEIGHT_EXACT: dict = {"review": 0.1, "lyrics": 0.1, "rational": 0.8}
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -6,9 +6,11 @@ LLM 服务 - 调用 LongMao (LongCat-Flash-Chat)
 2. 未来的动态评语生成
 """
 import json
+import logging
 from openai import OpenAI
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 _client = None
@@ -52,7 +54,13 @@ def parse_search_intent(query: str) -> dict:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
         )
-        return json.loads(response.choices[0].message.content)
-    except Exception:
+        result = json.loads(response.choices[0].message.content)
+        logger.info(f"LLM intent parsed: query='{query}' -> type={result.get('type')}, vibe={result.get('vibe')}")
+        return result
+    except json.JSONDecodeError as e:
+        logger.warning(f"LLM returned invalid JSON for query '{query}': {e}")
+        return {"artist": None, "title": None, "vibe": query, "type": "vibe"}
+    except Exception as e:
         # LLM 不可用时降级为纯 vibe 搜索
+        logger.warning(f"LLM intent parsing failed, falling back to vibe mode: {type(e).__name__}: {e}")
         return {"artist": None, "title": None, "vibe": query, "type": "vibe"}

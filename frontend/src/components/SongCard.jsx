@@ -184,8 +184,68 @@ export default function SongCard({ song, index = 0 }) {
             </p>
           </div>
         )}
+
+        {/* Explainability — 三路匹配度 */}
+        {song.review_score != null && (
+          <div style={{
+            marginTop: '0.5rem',
+            paddingTop: '0.5rem',
+            borderTop: '1px solid var(--border-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '3px',
+          }}>
+            <ScoreBar label="评语语义" value={song.review_score} color="var(--accent-pink)" />
+            <ScoreBar label="歌词语义" value={song.lyrics_score} color="var(--accent-yellow)" />
+            <ScoreBar label="关键词" value={song.rational_score} color="#8EC5FC" />
+          </div>
+        )}
       </div>
     </Link>
+  )
+}
+
+/**
+ * ScoreBar — 迷你进度条，展示单路匹配分数
+ */
+function ScoreBar({ label, value, color }) {
+  const pct = Math.min(Math.round((value || 0) * 100), 100)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+      <span style={{
+        fontSize: '0.575rem',
+        color: 'var(--text-muted)',
+        minWidth: '3rem',
+        textAlign: 'right',
+        flexShrink: 0,
+      }}>
+        {label}
+      </span>
+      <div style={{
+        flex: 1,
+        height: 4,
+        borderRadius: 2,
+        background: 'var(--bg-secondary)',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          width: `${pct}%`,
+          height: '100%',
+          borderRadius: 2,
+          background: color,
+          transition: 'width 0.6s ease-out',
+        }} />
+      </div>
+      <span style={{
+        fontSize: '0.55rem',
+        color: 'var(--text-muted)',
+        minWidth: '1.75rem',
+        fontWeight: 600,
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {pct}%
+      </span>
+    </div>
   )
 }
 

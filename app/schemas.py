@@ -33,6 +33,10 @@ class SongSearchResult(SongBase):
     vibe_tags: Optional[list[str]] = None
     core_lyrics: Optional[str] = None
     score: float = 0.0
+    # 可解释性：三路子分数 (0~1)
+    review_score: Optional[float] = None
+    lyrics_score: Optional[float] = None
+    rational_score: Optional[float] = None
 
     class Config:
         from_attributes = True
