@@ -72,6 +72,7 @@ async def proxy_song_audio(song_id: str):
     """
     代理音频流 — 解决浏览器直接请求网易云 MP3 被 Referer/CORS 拦截的问题。
     策略: 外链优先 → enhance API 兜底 → VIP 歌曲报错。
+    使用流式传输避免将整个音频文件读入内存。
     """
     _headers = {
         "Referer": "https://music.163.com/",
@@ -82,14 +83,23 @@ async def proxy_song_audio(song_id: str):
         ),
     }
 
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+    # 使用流式请求，避免大文件内存占用
+    client = httpx.AsyncClient(timeout=30, follow_redirects=True)
+    handoff_to_stream = False
+
+    try:
         # ① 尝试外链 (大部分免费歌曲可用)
         outer_url = _NETEASE_AUDIO_URL.format(song_id=song_id)
         try:
-            resp = await client.get(outer_url, headers=_headers)
+            resp = await client.send(
+                client.build_request("GET", outer_url, headers=_headers),
+                stream=True,
+            )
             ct = resp.headers.get("content-type", "")
             if resp.status_code == 200 and ("audio" in ct or "octet" in ct):
-                return _make_audio_response(resp)
+                handoff_to_stream = True
+                return _make_streaming_response(resp, client)
+            await resp.aclose()
         except httpx.HTTPError:
             pass
 
@@ -103,28 +113,47 @@ async def proxy_song_audio(song_id: str):
             data = api_resp.json()
             cdn_url = data.get("data", [{}])[0].get("url")
             if cdn_url:
-                audio_resp = await client.get(cdn_url, headers=_headers)
+                audio_resp = await client.send(
+                    client.build_request("GET", cdn_url, headers=_headers),
+                    stream=True,
+                )
                 if audio_resp.status_code == 200:
-                    return _make_audio_response(audio_resp)
-        except (httpx.HTTPError, KeyError, IndexError):
+                    handoff_to_stream = True
+                    return _make_streaming_response(audio_resp, client)
+                await audio_resp.aclose()
+        except (httpx.HTTPError, KeyError, IndexError, ValueError):
             pass
 
-    # ③ 两种方式都失败 — 大概率是 VIP 歌曲
-    raise HTTPException(
-        status_code=404,
-        detail="该歌曲暂不可播放（可能是 VIP 专属歌曲）",
-    )
+        # ③ 两种方式都失败 — 大概率是 VIP 歌曲
+        raise HTTPException(
+            status_code=404,
+            detail="该歌曲暂不可播放（可能是 VIP 专属歌曲）",
+        )
+    finally:
+        if not handoff_to_stream:
+            await client.aclose()
 
 
-def _make_audio_response(resp: httpx.Response) -> StreamingResponse:
-    """把上游音频响应包装成 StreamingResponse 返回给前端。"""
+def _make_streaming_response(
+    resp: httpx.Response, client: httpx.AsyncClient
+) -> StreamingResponse:
+    """把上游音频流式转发给前端，读完后关闭连接和客户端。"""
     content_type = resp.headers.get("content-type", "audio/mpeg")
     headers: dict[str, str] = {"Accept-Ranges": "bytes"}
     cl = resp.headers.get("content-length")
     if cl:
         headers["Content-Length"] = cl
+
+    async def _stream_iter():
+        try:
+            async for chunk in resp.aiter_bytes(chunk_size=64 * 1024):
+                yield chunk
+        finally:
+            await resp.aclose()
+            await client.aclose()
+
     return StreamingResponse(
-        iter([resp.content]),
+        _stream_iter(),
         media_type=content_type,
         headers=headers,
     )

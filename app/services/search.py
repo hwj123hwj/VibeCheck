@@ -16,6 +16,9 @@ from sqlalchemy.orm import Session
 from app.schemas import SearchResponse, SongSearchResult
 from app.services.embedding import get_embedding
 from app.services.llm import parse_search_intent
+from app.config import get_settings
+
+settings = get_settings()
 
 # 停用词 (搜索时过滤)
 ULTRA_STOP_WORDS = {
@@ -32,11 +35,11 @@ def _clean_query_words(query: str) -> list[str]:
     return cleaned if cleaned else words
 
 
-# 权重配置
+# 权重配置（从 config 读取，支持环境变量覆盖）
 WEIGHT_MAP = {
-    "lyrics": {"review": 0.2, "lyrics": 0.6, "rational": 0.2},
-    "exact":  {"review": 0.1, "lyrics": 0.1, "rational": 0.8},
-    "vibe":   {"review": 0.6, "lyrics": 0.2, "rational": 0.2},
+    "lyrics": settings.SEARCH_WEIGHT_LYRICS,
+    "exact":  settings.SEARCH_WEIGHT_EXACT,
+    "vibe":   settings.SEARCH_WEIGHT_VIBE,
 }
 
 
@@ -50,9 +53,9 @@ async def perform_hybrid_search(
     intent_type = intent.get("type", "vibe")
     weights = WEIGHT_MAP.get(intent_type, WEIGHT_MAP["vibe"])
 
-    # 2. 向量化用户查询
+    # 2. 向量化用户查询 (异步)
     vibe_query = intent.get("vibe") or user_query
-    query_vec = get_embedding(vibe_query)
+    query_vec = await get_embedding(vibe_query)
 
     # 3. 关键词分词
     cleaned_words = _clean_query_words(user_query)
@@ -84,7 +87,7 @@ async def perform_hybrid_search(
                 + LEAST(rational_score, 4.0) / 4.0 * :w_rat
                ) AS final_score
         FROM scoring_pool
-        WHERE review_score > 0.4 OR lyrics_score > 0.4
+        WHERE review_score > :threshold OR lyrics_score > :threshold
         ORDER BY final_score DESC
         LIMIT :limit
     """)
@@ -97,10 +100,11 @@ async def perform_hybrid_search(
         "w_rev": weights["review"],
         "w_lyr": weights["lyrics"],
         "w_rat": weights["rational"],
+        "threshold": settings.SEARCH_SCORE_THRESHOLD,
         "limit": top_k,
     }).fetchall()
 
-    # 5. 组装响应
+    # 5. 组装响应（含可解释性子分数）
     results = [
         SongSearchResult(
             id=row.id,
@@ -111,6 +115,9 @@ async def perform_hybrid_search(
             vibe_tags=row.vibe_tags,
             core_lyrics=row.core_lyrics,
             score=round(float(row.final_score), 4),
+            review_score=round(float(row.review_score), 4),
+            lyrics_score=round(float(row.lyrics_score), 4),
+            rational_score=round(float(row.rational_score), 4),
         )
         for row in rows
     ]

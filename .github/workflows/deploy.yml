@@ -1,4 +1,4 @@
-name: Deploy VibeCheck (Self-Hosted ZIP)
+﻿name: Deploy VibeCheck (Self-Hosted ZIP)
 
 on:
   push:
@@ -12,23 +12,22 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Deploy to Target Directory
+        env:
+          TARGET_PATH: /home/ubuntu/VibeCheck
         run: |
-          echo "🚀 [1/2] 正在同步代码到生产目录..."
-          TARGET_PATH="/home/ubuntu/VibeCheck"
-          
-          # 创建目录（如果不存在）
-          mkdir -p $TARGET_PATH
-          
-          # 排除干扰文件和由 Docker 产生的 root 权限缓存文件
+          set -e
+
+          echo "[1/2] Sync repository files"
+          mkdir -p "$TARGET_PATH"
           rsync -av --delete \
             --exclude '.git' \
             --exclude '.github' \
+            --exclude '.env' \
             --exclude '__pycache__' \
             --exclude '*.pyc' \
-            ./ $TARGET_PATH/
-          
-          cd $TARGET_PATH
-          echo "🚀 [2/2] 执行部署脚本..."
+            ./ "$TARGET_PATH/"
+
+          echo "[2/2] Run deploy script"
+          cd "$TARGET_PATH"
           chmod +x deploy.sh
           ./deploy.sh
-          echo "🎉 部署全部完成！"
