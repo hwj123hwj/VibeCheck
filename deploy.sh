@@ -43,7 +43,6 @@ ensure_node() {
 }
 
 start_backend() {
-  # If venv exists but is broken (partial create), recreate it.
   if [ -d ".venv" ] && [ ! -f ".venv/bin/activate" ]; then
     echo "[deploy] broken .venv detected, recreating..."
     rm -rf .venv
@@ -77,6 +76,20 @@ build_frontend() {
   echo "[deploy] Frontend build completed"
 }
 
+publish_frontend() {
+  if ! can_sudo; then
+    echo "[deploy] sudo is required to publish frontend files"
+    exit 1
+  fi
+
+  sudo mkdir -p /var/www/vibecheck
+  sudo rsync -a --delete "$APP_DIR/frontend/dist/" /var/www/vibecheck/
+  sudo find /var/www/vibecheck -type d -exec chmod 755 {} \;
+  sudo find /var/www/vibecheck -type f -exec chmod 644 {} \;
+
+  echo "[deploy] Frontend published to /var/www/vibecheck"
+}
+
 configure_nginx() {
   if ! can_sudo; then
     echo "[deploy] sudo is required to configure nginx"
@@ -94,7 +107,7 @@ server {
     listen 80;
     server_name _;
 
-    root $APP_DIR/frontend/dist;
+    root /var/www/vibecheck;
     index index.html;
 
     location /api/ {
@@ -119,7 +132,11 @@ server {
     }
 
     location / {
-        try_files \$uri /index.html;
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    location = /index.html {
+        try_files \$uri =404;
     }
 }
 EOF
@@ -134,6 +151,7 @@ EOF
 
 start_backend
 build_frontend
+publish_frontend
 configure_nginx
 
 echo "[deploy] Full deployment completed"
