@@ -1,33 +1,66 @@
-﻿name: Deploy VibeCheck (Self-Hosted ZIP)
+name: Deploy VibeCheck
 
 on:
   push:
     branches: [ master ]
+  workflow_dispatch:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Deploy to Target Directory
+      - name: Setup SSH key
         env:
-          TARGET_PATH: /home/ubuntu/VibeCheck
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
         run: |
           set -e
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
-          echo "[1/2] Sync repository files"
-          mkdir -p "$TARGET_PATH"
-          rsync -av --delete \
+      - name: Add server to known_hosts
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+        run: |
+          set -e
+          PORT="${SERVER_PORT:-22}"
+          ssh-keyscan -p "$PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync files to server
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_PATH: ${{ secrets.SERVER_PATH }}
+        run: |
+          set -e
+          PORT="${SERVER_PORT:-22}"
+          TARGET_PATH="${SERVER_PATH:-/home/ubuntu/VibeCheck}"
+          rsync -az --delete \
             --exclude '.git' \
             --exclude '.github' \
             --exclude '.env' \
             --exclude '__pycache__' \
             --exclude '*.pyc' \
-            ./ "$TARGET_PATH/"
+            -e "ssh -p $PORT" \
+            ./ "${SERVER_USER}@${SERVER_HOST}:${TARGET_PATH}/"
 
-          echo "[2/2] Run deploy script"
-          cd "$TARGET_PATH"
-          chmod +x deploy.sh
-          ./deploy.sh
+      - name: Run remote deploy command
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_PATH: ${{ secrets.SERVER_PATH }}
+        run: |
+          set -e
+          PORT="${SERVER_PORT:-22}"
+          TARGET_PATH="${SERVER_PATH:-/home/ubuntu/VibeCheck}"
+          ssh -p "$PORT" "${SERVER_USER}@${SERVER_HOST}" "set -e; cd \"$TARGET_PATH\"; \
+            if [ -f deploy.sh ]; then chmod +x deploy.sh && ./deploy.sh; \
+            elif [ -f deploy_crawler/docker-compose.yml ]; then cd deploy_crawler && docker compose up -d --build; \
+            else echo 'No deploy.sh or deploy_crawler/docker-compose.yml found' && exit 1; fi"
