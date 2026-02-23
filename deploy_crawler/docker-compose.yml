@@ -1,41 +1,37 @@
-services:
-  # === 数据库服务 ===
+﻿services:
   db:
-    image: pgvector/pgvector:pg17 # 使用 Postgres 17 + pgvector
+    image: pgvector/pgvector:pg17
     container_name: music_db_server
     restart: always
     environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: 15671040800q
-      POSTGRES_DB: music_db
+      POSTGRES_USER: ${DB_USER:-root}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-music_db}
     ports:
-      # 映射到宿主机端口，方便外部查看工具连接（可选）
       - "5433:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
 
-  # === 爬虫应用服务 (已进入挂机模式，仅用于跑脚本) ===
   crawler:
     build: .
     container_name: music_crawler_server
-    restart: always 
+    restart: always
     depends_on:
       - db
+    env_file:
+      - ../.env
     environment:
-      # 数据库连接配置 (对应 db 服务)
       DB_HOST: db
       DB_PORT: 5432
-      DB_USER: root
-      DB_PASSWORD: 15671040800q
-      DB_NAME: music_db
-      # LLM 接口配置 (感性分析)
-      LONGMAO_API_KEY: "ak_1hb78c5hG3Oe7IQ1VM1nj58T2o373"
-      LONGMAO_BASE_URL: "https://api.longcat.chat/openai"
-      LONGMAO_MODEL: "LongCat-Flash-Chat"
-      # 硅基流动配置 (语义向量化)
-      GUIJI_API_KEY: "sk-pjgenkdeoudivpnruwhnkysilysvgpurseenmmrvqgntxela"
-      GUIJI_EMB_URL: "https://api.siliconflow.cn/v1/embeddings"
-      GUIJI_EMB_MODEL: "BAAI/bge-m3"
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-music_db}
+      LONGMAO_API_KEY: ${LONGMAO_API_KEY}
+      LONGMAO_BASE_URL: ${LONGMAO_BASE_URL:-https://api.longcat.chat/openai}
+      LONGMAO_MODEL: ${LONGMAO_MODEL:-LongCat-Flash-Chat}
+      GUIJI_API_KEY: ${GUIJI_API_KEY}
+      GUIJI_EMB_URL: ${GUIJI_EMB_URL:-https://api.siliconflow.cn/v1/embeddings}
+      GUIJI_EMB_MODEL: ${GUIJI_EMB_MODEL:-BAAI/bge-m3}
     tty: true
     command: tail -f /dev/null
 

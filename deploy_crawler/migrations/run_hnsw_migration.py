@@ -1,26 +1,26 @@
-"""
-执行 HNSW 向量索引迁移
-
-在 5.3w+ 规模数据上创建 HNSW 索引，将向量检索从全表扫描加速至 100ms 级。
-"""
+﻿"""Run HNSW index migration using DATABASE_URL from environment."""
+import os
 import time
+
 import sqlalchemy
 
-DB_URL = "postgresql://root:15671040800q@49.233.41.129:5433/music_db"
+DB_URL = os.getenv("DATABASE_URL")
+if not DB_URL:
+    DB_USER = os.getenv("DB_USER", "root")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
+    DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
+    DB_PORT = os.getenv("DB_PORT", "5433")
+    DB_NAME = os.getenv("DB_NAME", "music_db")
+    DB_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 engine = sqlalchemy.create_engine(DB_URL)
 
 with engine.connect() as conn:
-    # ── Pre-flight checks ──
-    r = conn.execute(sqlalchemy.text(
-        "SELECT extversion FROM pg_extension WHERE extname='vector'"
-    ))
+    r = conn.execute(sqlalchemy.text("SELECT extversion FROM pg_extension WHERE extname='vector'"))
     row = r.fetchone()
     print(f"[CHECK] pgvector version: {row[0] if row else 'NOT INSTALLED'}")
 
-    r2 = conn.execute(sqlalchemy.text(
-        "SELECT indexname FROM pg_indexes WHERE tablename='songs' AND indexname LIKE '%hnsw%'"
-    ))
+    r2 = conn.execute(sqlalchemy.text("SELECT indexname FROM pg_indexes WHERE tablename='songs' AND indexname LIKE '%hnsw%'"))
     existing = [row[0] for row in r2.fetchall()]
     print(f"[CHECK] Existing HNSW indexes: {existing}")
 
@@ -30,7 +30,6 @@ with engine.connect() as conn:
     r4 = conn.execute(sqlalchemy.text("SELECT count(*) FROM songs WHERE lyrics_vector IS NOT NULL"))
     print(f"[CHECK] Rows with lyrics_vector: {r4.fetchone()[0]}")
 
-    # ── Create HNSW indexes ──
     if "idx_review_vector_hnsw" not in existing:
         print("\n[MIGRATE] Creating idx_review_vector_hnsw ... (this may take a few minutes)")
         t0 = time.time()
@@ -57,7 +56,6 @@ with engine.connect() as conn:
     else:
         print("[SKIP] idx_lyrics_vector_hnsw already exists")
 
-    # ── Verify ──
     r5 = conn.execute(sqlalchemy.text(
         "SELECT indexname, pg_size_pretty(pg_relation_size(indexname::regclass)) as size "
         "FROM pg_indexes WHERE tablename='songs' AND indexname LIKE '%hnsw%'"
@@ -66,4 +64,4 @@ with engine.connect() as conn:
     for row in r5.fetchall():
         print(f"  - {row[0]}  ({row[1]})")
 
-    print("\n✅ Migration complete!")
+    print("\nMigration complete!")

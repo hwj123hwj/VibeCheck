@@ -1,54 +1,44 @@
-# VibeCheck 音乐数据爬虫部署指南
+﻿# VibeCheck 闊充箰鏁版嵁鐖櫕閮ㄧ讲鎸囧崡
 
-本文件夹包含了在服务器上部署 VibeCheck 爬虫所需的所有文件。
+鏈枃浠跺す鍖呭惈浜嗗湪鏈嶅姟鍣ㄤ笂閮ㄧ讲 VibeCheck 鐖櫕鎵€闇€鐨勬墍鏈夋枃浠躲€?
+## 鍖呭惈鍐呭
 
-## 包含内容
+*   `app.py`: 鐖櫕涓荤▼搴?(绾?Python, 鏃犻渶娴忚鍣?銆?*   `db_init.py`: 鏁版嵁搴撳垵濮嬪寲鑴氭湰銆?*   `Dockerfile`: 鐖櫕瀹瑰櫒鏋勫缓鏂囦欢銆?*   `docker-compose.yml`: 涓€閿惎鍔ㄦ暟鎹簱鍜岀埇铏湇鍔°€?*   `requirements.txt`: Python 渚濊禆銆?
+## 閮ㄧ讲姝ラ
 
-*   `app.py`: 爬虫主程序 (纯 Python, 无需浏览器)。
-*   `db_init.py`: 数据库初始化脚本。
-*   `Dockerfile`: 爬虫容器构建文件。
-*   `docker-compose.yml`: 一键启动数据库和爬虫服务。
-*   `requirements.txt`: Python 依赖。
-
-## 部署步骤
-
-1.  **上传文件**
-    将 `deploy_crawler` 整个文件夹上传到您的 Linux 服务器。
-
-2.  **进入目录**
+1.  **涓婁紶鏂囦欢**
+    灏?`deploy_crawler` 鏁翠釜鏂囦欢澶逛笂浼犲埌鎮ㄧ殑 Linux 鏈嶅姟鍣ㄣ€?
+2.  **杩涘叆鐩綍**
     ```bash
     cd deploy_crawler
     ```
 
-3.  **启动服务**
-    使用 Docker Compose 一键构建并启动：
-    ```bash
+3.  **鍚姩鏈嶅姟**
+    浣跨敤 Docker Compose 涓€閿瀯寤哄苟鍚姩锛?    ```bash
     docker-compose up --build -d
     ```
-    *   `-d` 表示在后台运行。
-
-4.  **查看日志**
-    查看爬虫运行进度和日志：
+    *   `-d` 琛ㄧず鍦ㄥ悗鍙拌繍琛屻€?
+4.  **鏌ョ湅鏃ュ織**
+    鏌ョ湅鐖櫕杩愯杩涘害鍜屾棩蹇楋細
     ```bash
     docker-compose logs -f crawler
     ```
     
-    查看数据库日志：
+    鏌ョ湅鏁版嵁搴撴棩蹇楋細
     ```bash
     docker-compose logs -f db
     ```
 
-5.  **停止服务**
+5.  **鍋滄鏈嶅姟**
     ```bash
     docker-compose down
     ```
 
-## 数据库信息
-
-*   **Host**: `localhost` (服务器内部互联使用 `db`)
-*   **Port**: `5433` (暴露给外部的端口，内部使用 5432)
+## 鏁版嵁搴撲俊鎭?
+*   **Host**: `localhost` (鏈嶅姟鍣ㄥ唴閮ㄤ簰鑱斾娇鐢?`db`)
+*   **Port**: `5433` (鏆撮湶缁欏閮ㄧ殑绔彛锛屽唴閮ㄤ娇鐢?5432)
 *   **User**: `root`
-*   **Password**: `15671040800q`
+*   **Password**: `<set-in-.env>`
 *   **Database**: `music_db`
 
-数据将持久化保存在 Docker Volume `db_data` 中。
+鏁版嵁灏嗘寔涔呭寲淇濆瓨鍦?Docker Volume `db_data` 涓€?
