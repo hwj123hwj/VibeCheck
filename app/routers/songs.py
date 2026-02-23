@@ -85,47 +85,53 @@ async def proxy_song_audio(song_id: str):
 
     # 使用流式请求，避免大文件内存占用
     client = httpx.AsyncClient(timeout=30, follow_redirects=True)
+    handoff_to_stream = False
 
-    # ① 尝试外链 (大部分免费歌曲可用)
-    outer_url = _NETEASE_AUDIO_URL.format(song_id=song_id)
     try:
-        resp = await client.send(
-            client.build_request("GET", outer_url, headers=_headers),
-            stream=True,
-        )
-        ct = resp.headers.get("content-type", "")
-        if resp.status_code == 200 and ("audio" in ct or "octet" in ct):
-            return _make_streaming_response(resp, client)
-        await resp.aclose()
-    except httpx.HTTPError:
-        pass
-
-    # ② 外链失败，用 enhance/player/url API 获取 CDN 直链
-    try:
-        api_resp = await client.get(
-            "http://music.163.com/api/song/enhance/player/url",
-            params={"id": song_id, "ids": f"[{song_id}]", "br": 320000},
-            headers=_headers,
-        )
-        data = api_resp.json()
-        cdn_url = data.get("data", [{}])[0].get("url")
-        if cdn_url:
-            audio_resp = await client.send(
-                client.build_request("GET", cdn_url, headers=_headers),
+        # ① 尝试外链 (大部分免费歌曲可用)
+        outer_url = _NETEASE_AUDIO_URL.format(song_id=song_id)
+        try:
+            resp = await client.send(
+                client.build_request("GET", outer_url, headers=_headers),
                 stream=True,
             )
-            if audio_resp.status_code == 200:
-                return _make_streaming_response(audio_resp, client)
-            await audio_resp.aclose()
-    except (httpx.HTTPError, KeyError, IndexError):
-        pass
+            ct = resp.headers.get("content-type", "")
+            if resp.status_code == 200 and ("audio" in ct or "octet" in ct):
+                handoff_to_stream = True
+                return _make_streaming_response(resp, client)
+            await resp.aclose()
+        except httpx.HTTPError:
+            pass
 
-    await client.aclose()
-    # ③ 两种方式都失败 — 大概率是 VIP 歌曲
-    raise HTTPException(
-        status_code=404,
-        detail="该歌曲暂不可播放（可能是 VIP 专属歌曲）",
-    )
+        # ② 外链失败，用 enhance/player/url API 获取 CDN 直链
+        try:
+            api_resp = await client.get(
+                "http://music.163.com/api/song/enhance/player/url",
+                params={"id": song_id, "ids": f"[{song_id}]", "br": 320000},
+                headers=_headers,
+            )
+            data = api_resp.json()
+            cdn_url = data.get("data", [{}])[0].get("url")
+            if cdn_url:
+                audio_resp = await client.send(
+                    client.build_request("GET", cdn_url, headers=_headers),
+                    stream=True,
+                )
+                if audio_resp.status_code == 200:
+                    handoff_to_stream = True
+                    return _make_streaming_response(audio_resp, client)
+                await audio_resp.aclose()
+        except (httpx.HTTPError, KeyError, IndexError, ValueError):
+            pass
+
+        # ③ 两种方式都失败 — 大概率是 VIP 歌曲
+        raise HTTPException(
+            status_code=404,
+            detail="该歌曲暂不可播放（可能是 VIP 专属歌曲）",
+        )
+    finally:
+        if not handoff_to_stream:
+            await client.aclose()
 
 
 def _make_streaming_response(
