@@ -65,6 +65,5 @@ jobs:
           SSH_OPTS="-p $PORT -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes -o ConnectTimeout=20"
 
           ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" "set -e; cd \"$TARGET_PATH\"; \
-            if [ -f deploy.sh ]; then chmod +x deploy.sh && ./deploy.sh; \
-            elif [ -f deploy_crawler/docker-compose.yml ]; then cd deploy_crawler && docker compose up -d --build; \
-            else echo 'No deploy.sh or deploy_crawler/docker-compose.yml found' && exit 1; fi"
+            if [ ! -f deploy.sh ]; then echo 'deploy.sh not found' && exit 1; fi; \
+            chmod +x deploy.sh; ./deploy.sh"
