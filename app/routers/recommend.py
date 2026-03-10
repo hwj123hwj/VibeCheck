@@ -2,7 +2,8 @@
 推荐接口
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.database import get_db, Song
 from app.schemas import RecommendResponse, SongBase
@@ -15,14 +16,15 @@ router = APIRouter()
 async def recommend_songs(
     song_id: str,
     top_k: int = Query(10, ge=1, le=50),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     基于单首歌曲推荐相似歌曲
 
     混合融合：review_vector + lyrics_vector + tfidf 关键词
     """
-    source = db.query(Song).filter(Song.id == song_id).first()
+    result = await db.execute(select(Song).where(Song.id == song_id))
+    source = result.scalar_one_or_none()
     if not source:
         raise HTTPException(status_code=404, detail="Song not found")
 

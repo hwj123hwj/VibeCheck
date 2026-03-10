@@ -3,9 +3,11 @@ import Layout from './components/Layout'
 import HomePage from './pages/HomePage'
 import SearchPage from './pages/SearchPage'
 import SongDetailPage from './pages/SongDetailPage'
+import { SearchProvider } from './context/SearchContext'
 
 function App() {
   return (
+    <SearchProvider>
     <div className="noise-overlay">
       <Routes>
         <Route element={<Layout />}>
@@ -15,6 +17,7 @@ function App() {
         </Route>
       </Routes>
     </div>
+    </SearchProvider>
   )
 }
 

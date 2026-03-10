@@ -9,9 +9,10 @@
   2. lyrics_vector  — 精华歌词语义相似度
   3. rational_score — TF-IDF 关键词 + 精确匹配
 """
+import asyncio
 import jieba
 from sqlalchemy import text as sql_text
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas import SearchResponse, SongSearchResult
 from app.services.embedding import get_embedding
@@ -44,24 +45,29 @@ WEIGHT_MAP = {
 
 
 async def perform_hybrid_search(
-    user_query: str, top_k: int, db: Session
+    user_query: str, top_k: int, db: AsyncSession
 ) -> SearchResponse:
     """执行混合搜索并返回结构化结果"""
 
-    # 1. AI 意图路由
-    intent = parse_search_intent(user_query)
+    # 1. LLM 意图解析 与 Embedding 向量化 并发执行，节省一个串行等待
+    intent, query_vec = await asyncio.gather(
+        parse_search_intent(user_query),
+        get_embedding(user_query),
+    )
+
     intent_type = intent.get("type", "vibe")
     weights = WEIGHT_MAP.get(intent_type, WEIGHT_MAP["vibe"])
 
-    # 2. 向量化用户查询 (异步)
+    # 若 LLM 提取的 vibe 与原始 query 不同，则单独向量化 vibe（通常发生在 exact 类型）
     vibe_query = intent.get("vibe") or user_query
-    query_vec = await get_embedding(vibe_query)
+    if vibe_query != user_query:
+        query_vec = await get_embedding(vibe_query)
 
-    # 3. 关键词分词
+    # 2. 关键词分词
     cleaned_words = _clean_query_words(user_query)
     ts_query = " | ".join(cleaned_words)
 
-    # 4. 混合 SQL (双向量 + TF-IDF + 精确匹配)
+    # 3. 混合 SQL (双向量 + TF-IDF + 精确匹配)
     search_sql = sql_text("""
         WITH scoring_pool AS (
             SELECT
@@ -92,7 +98,7 @@ async def perform_hybrid_search(
         LIMIT :limit
     """)
 
-    rows = db.execute(search_sql, {
+    result = await db.execute(search_sql, {
         "q_vec": str(query_vec),
         "ts_q": ts_query,
         "artist_q": f"%{intent['artist']}%" if intent.get("artist") else "%__NONE__%",
@@ -102,9 +108,10 @@ async def perform_hybrid_search(
         "w_rat": weights["rational"],
         "threshold": settings.SEARCH_SCORE_THRESHOLD,
         "limit": top_k,
-    }).fetchall()
+    })
+    rows = result.fetchall()
 
-    # 5. 组装响应（含可解释性子分数）
+    # 4. 组装响应（含可解释性子分数）
     results = [
         SongSearchResult(
             id=row.id,

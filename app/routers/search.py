@@ -1,10 +1,8 @@
 """
 语义搜索接口
-
-将 deploy_crawler/hybrid_search_test.py 的逻辑正式化。
 """
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.schemas import SearchResponse
@@ -17,7 +15,7 @@ router = APIRouter()
 async def search_songs(
     q: str = Query(..., min_length=1, max_length=200, description="自然语言搜索词"),
     top_k: int = Query(10, ge=1, le=50),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     语义搜索歌曲

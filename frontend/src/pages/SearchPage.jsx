@@ -4,13 +4,17 @@ import { SearchX } from 'lucide-react'
 import SearchInput from '../components/SearchInput'
 import SongCard from '../components/SongCard'
 import { searchSongs } from '../api/client'
+import { useSearchCache } from '../context/SearchContext'
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [results, setResults] = useState([])
-  const [intentType, setIntentType] = useState(null)
+  const cache = useSearchCache()
+
+  // 初始化时从 cache 恢复，避免返回时白屏
+  const [results, setResults] = useState(cache.current.results)
+  const [intentType, setIntentType] = useState(cache.current.intentType)
   const [isLoading, setIsLoading] = useState(false)
-  const [hasSearched, setHasSearched] = useState(false)
+  const [hasSearched, setHasSearched] = useState(cache.current.hasSearched)
 
   // Track the latest search to ignore stale responses
   const searchIdRef = useRef(0)
@@ -25,30 +29,37 @@ export default function SearchPage() {
 
     try {
       const data = await searchSongs(query, 20)
-      // Only update if this is still the latest search
       if (searchIdRef.current !== thisSearchId) return
-      setResults(data.results || [])
-      setIntentType(data.intent_type || null)
+      const newResults = data.results || []
+      const newIntentType = data.intent_type || null
+      setResults(newResults)
+      setIntentType(newIntentType)
+      // 写入缓存
+      cache.current = { query, results: newResults, intentType: newIntentType, hasSearched: true }
     } catch (err) {
       if (searchIdRef.current !== thisSearchId) return
       console.error('Search failed:', err)
       setResults([])
+      cache.current = { ...cache.current, results: [], hasSearched: true }
     } finally {
       if (searchIdRef.current === thisSearchId) {
         setIsLoading(false)
       }
     }
-  }, [setSearchParams])
+  }, [setSearchParams, cache])
 
-  // Auto-search from URL param on mount (replaces the broken useState hack)
-  const didAutoSearch = useRef(false)
+  // 挂载时：URL query 与缓存一致则直接复用，否则重新请求
   useEffect(() => {
-    if (didAutoSearch.current) return
     const q = searchParams.get('q')
-    if (q) {
-      didAutoSearch.current = true
-      handleSearch(q)
+    if (!q) return
+    if (q === cache.current.query && cache.current.hasSearched) {
+      // 缓存命中，直接展示，不发请求
+      setResults(cache.current.results)
+      setIntentType(cache.current.intentType)
+      setHasSearched(true)
+      return
     }
+    handleSearch(q)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (

@@ -4,29 +4,33 @@
 这是 VibeCheck 后端 API 使用的数据库层。
 Song 模型与 deploy_crawler/db_init.py 保持字段完全一致。
 """
-from sqlalchemy import create_engine, Column, String, Text, DateTime, Boolean, func
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy import Column, String, Text, DateTime, Boolean, func
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from pgvector.sqlalchemy import Vector
-from typing import Generator
+from typing import AsyncGenerator
 
 from app.config import get_settings
 
-# ---------- Engine & Session ----------
-
 settings = get_settings()
-engine = create_engine(settings.database_url, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# ---------- Async Engine & Session ----------
+
+# 将 postgresql:// 替换为 postgresql+asyncpg://
+_async_url = settings.database_url.replace(
+    "postgresql://", "postgresql+asyncpg://", 1
+)
+
+engine = create_async_engine(_async_url, pool_pre_ping=True, pool_size=10, max_overflow=20)
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 Base = declarative_base()
 
 
-def get_db() -> Generator[Session, None, None]:
-    """FastAPI 依赖注入：获取数据库 Session"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """FastAPI 依赖注入：获取异步数据库 Session"""
+    async with AsyncSessionLocal() as session:
+        yield session
 
 
 # ---------- ORM Model ----------

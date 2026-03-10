@@ -7,14 +7,14 @@
   FinalScore = 0.5 * Sim_review + 0.4 * Sim_lyrics + 0.1 * TF-IDF_overlap
 """
 from sqlalchemy import text as sql_text
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import Song
 from app.schemas import SongSearchResult
 
 
 async def get_similar_songs(
-    source: Song, top_k: int, db: Session
+    source: Song, top_k: int, db: AsyncSession
 ) -> list[SongSearchResult]:
     """
     给定一首歌，返回最相似的 Top-K 推荐
@@ -24,11 +24,9 @@ async def get_similar_songs(
     if source.review_vector is None:
         return []
 
-    # pgvector 返回 numpy 数组，.tolist() 转为 Python 原生 float 列表
     src_review_vec = str(source.review_vector.tolist())
     src_lyrics_vec = str(source.lyrics_vector.tolist()) if source.lyrics_vector is not None else src_review_vec
 
-    # 提取源歌曲的 TF-IDF 关键词集合，用于计算关键词重叠
     src_tfidf_keys: list[str] = []
     if source.tfidf_vector and isinstance(source.tfidf_vector, dict):
         src_tfidf_keys = list(source.tfidf_vector.keys())[:20]
@@ -66,14 +64,15 @@ async def get_similar_songs(
         LIMIT :limit
     """)
 
-    rows = db.execute(recommend_sql, {
+    result = await db.execute(recommend_sql, {
         "src_id": source.id,
         "src_review_vec": src_review_vec,
         "src_lyrics_vec": src_lyrics_vec,
         "src_tfidf_keys": src_tfidf_keys,
         "src_tfidf_len": len(src_tfidf_keys),
         "limit": top_k,
-    }).fetchall()
+    })
+    rows = result.fetchall()
 
     return [
         SongSearchResult(

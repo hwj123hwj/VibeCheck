@@ -4,8 +4,8 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 
 from app.database import get_db, Song
 from app.schemas import SongDetail, SongBase
@@ -19,16 +19,17 @@ _NETEASE_AUDIO_URL = "https://music.163.com/song/media/outer/url?id={song_id}.mp
 
 
 @router.get("/songs/{song_id}", response_model=SongDetail)
-async def get_song(song_id: str, db: Session = Depends(get_db)):
+async def get_song(song_id: str, db: AsyncSession = Depends(get_db)):
     """获取单首歌曲详情"""
-    song = db.query(Song).filter(Song.id == song_id).first()
+    result = await db.execute(select(Song).where(Song.id == song_id))
+    song = result.scalar_one_or_none()
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
     return song
 
 
 @router.get("/songs/{song_id}/lrc")
-async def get_song_lrc(song_id: str, db: Session = Depends(get_db)):
+async def get_song_lrc(song_id: str, db: AsyncSession = Depends(get_db)):
     """
     获取歌曲的 LRC 格式歌词 (带时间戳)，用于前端同步滚动播放。
 
@@ -39,9 +40,8 @@ async def get_song_lrc(song_id: str, db: Session = Depends(get_db)):
         "tlyric": "[00:12.34]First line translation\\n..."  // 翻译歌词，可能为空
     }
     """
-    # 先确认歌曲存在
-    song = db.query(Song).filter(Song.id == song_id).first()
-    if not song:
+    result = await db.execute(select(Song.id).where(Song.id == song_id))
+    if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Song not found")
 
     # 从网易云 API 实时获取带时间戳的 LRC 歌词
@@ -83,7 +83,6 @@ async def proxy_song_audio(song_id: str):
         ),
     }
 
-    # 使用流式请求，避免大文件内存占用
     client = httpx.AsyncClient(timeout=30, follow_redirects=True)
     handoff_to_stream = False
 
@@ -124,7 +123,6 @@ async def proxy_song_audio(song_id: str):
         except (httpx.HTTPError, KeyError, IndexError, ValueError):
             pass
 
-        # ③ 两种方式都失败 — 大概率是 VIP 歌曲
         raise HTTPException(
             status_code=404,
             detail="该歌曲暂不可播放（可能是 VIP 专属歌曲）",
@@ -160,16 +158,12 @@ def _make_streaming_response(
 
 
 @router.get("/songs/random/list", response_model=list[SongBase])
-async def get_random_songs(count: int = 12, db: Session = Depends(get_db)):
+async def get_random_songs(count: int = 12, db: AsyncSession = Depends(get_db)):
     """随机获取歌曲（首页发现用）"""
-    songs = (
-        db.query(Song)
-        .filter(
-            Song.is_duplicate == False,
-            Song.review_text != None,
-        )
+    result = await db.execute(
+        select(Song)
+        .where(Song.is_duplicate == False, Song.review_text != None)
         .order_by(func.random())
         .limit(count)
-        .all()
     )
-    return songs
+    return result.scalars().all()

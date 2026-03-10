@@ -7,28 +7,28 @@ LLM 服务 - 调用 LongMao (LongCat-Flash-Chat)
 """
 import json
 import logging
-from openai import OpenAI
+from openai import AsyncOpenAI
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-_client = None
+_client: AsyncOpenAI | None = None
 
 
-def _get_client() -> OpenAI:
+def _get_client() -> AsyncOpenAI:
     global _client
     if _client is None:
-        _client = OpenAI(
+        _client = AsyncOpenAI(
             api_key=settings.LONGMAO_API_KEY,
             base_url=settings.LONGMAO_BASE_URL,
         )
     return _client
 
 
-def parse_search_intent(query: str) -> dict:
+async def parse_search_intent(query: str) -> dict:
     """
-    使用 LLM 解析用户搜索意图
+    使用 LLM 解析用户搜索意图（异步，不阻塞事件循环）
 
     Returns:
         {
@@ -49,7 +49,7 @@ def parse_search_intent(query: str) -> dict:
 
     try:
         client = _get_client()
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=settings.LONGMAO_MODEL,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
