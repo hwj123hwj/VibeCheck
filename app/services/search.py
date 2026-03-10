@@ -44,6 +44,48 @@ WEIGHT_MAP = {
 }
 
 
+async def _exact_search(
+    intent: dict, top_k: int, db: AsyncSession
+) -> list[SongSearchResult]:
+    """exact 类型：直接走精确 SQL，不做向量计算"""
+    exact_sql = sql_text("""
+        SELECT
+            id, title, artist, album_cover,
+            vibe_tags, review_text, core_lyrics,
+            (
+                CASE WHEN artist ILIKE :artist_q THEN 2.0 ELSE 0 END +
+                CASE WHEN title  ILIKE :title_q  THEN 3.0 ELSE 0 END
+            ) AS score
+        FROM songs
+        WHERE is_duplicate = false
+          AND (
+              (:has_artist AND artist ILIKE :artist_q) OR
+              (:has_title  AND title  ILIKE :title_q)
+          )
+        ORDER BY score DESC
+        LIMIT :limit
+    """)
+    artist_q = f"%{intent['artist']}%" if intent.get("artist") else "%%"
+    title_q  = f"%{intent['title']}%"  if intent.get("title")  else "%%"
+    result = await db.execute(exact_sql, {
+        "artist_q":   artist_q,
+        "title_q":    title_q,
+        "has_artist": bool(intent.get("artist")),
+        "has_title":  bool(intent.get("title")),
+        "limit":      top_k,
+    })
+    rows = result.fetchall()
+    return [
+        SongSearchResult(
+            id=row.id, title=row.title, artist=row.artist,
+            album_cover=row.album_cover, review_text=row.review_text,
+            vibe_tags=row.vibe_tags, core_lyrics=row.core_lyrics,
+            score=round(float(row.score), 4),
+        )
+        for row in rows
+    ]
+
+
 async def perform_hybrid_search(
     user_query: str, top_k: int, db: AsyncSession
 ) -> SearchResponse:
@@ -57,6 +99,13 @@ async def perform_hybrid_search(
 
     intent_type = intent.get("type", "vibe")
     weights = WEIGHT_MAP.get(intent_type, WEIGHT_MAP["vibe"])
+
+    # exact 类型：有明确歌手或歌名，直接精确匹配，跳过向量计算
+    if intent_type == "exact" and (intent.get("artist") or intent.get("title")):
+        results = await _exact_search(intent, top_k, db)
+        # 精确匹配无结果时降级为混合搜索
+        if results:
+            return SearchResponse(query=user_query, intent_type=intent_type, results=results)
 
     # 若 LLM 提取的 vibe 与原始 query 不同，则单独向量化 vibe（通常发生在 exact 类型）
     vibe_query = intent.get("vibe") or user_query

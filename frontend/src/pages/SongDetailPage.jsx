@@ -16,31 +16,47 @@ export default function SongDetailPage() {
   const [lrcLines, setLrcLines] = useState([])
   const [recommendations, setRecommendations] = useState([])
   const [loading, setLoading] = useState(true)
+  const [lrcLoading, setLrcLoading] = useState(true)
+  const [recLoading, setRecLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    const load = async () => {
+
+    // 优先加载歌曲详情，详情到了立即渲染
+    const loadDetail = async () => {
       setLoading(true)
       setSong(null)
       setLrcLines([])
       setRecommendations([])
+      setLrcLoading(true)
+      setRecLoading(true)
       try {
-        const [detail, lrc, rec] = await Promise.allSettled([
-          getSongDetail(id),
-          getSongLrc(id),
-          getRecommendations(id, 6),
-        ])
+        const detail = await getSongDetail(id)
         if (cancelled) return
-        if (detail.status === 'fulfilled') setSong(detail.value)
-        if (lrc.status === 'fulfilled') setLrcLines(parseLrc(lrc.value.lrc))
-        if (rec.status === 'fulfilled') setRecommendations(rec.value.recommendations || [])
+        setSong(detail)
       } catch (err) {
-        console.error('Failed to load song:', err)
+        console.error('Failed to load song detail:', err)
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
-    load()
+
+    // LRC 和推荐异步加载，不阻塞主内容
+    const loadSecondary = async () => {
+      const [lrc, rec] = await Promise.allSettled([
+        getSongLrc(id),
+        getRecommendations(id, 6),
+      ])
+      if (cancelled) return
+      if (lrc.status === 'fulfilled') setLrcLines(parseLrc(lrc.value.lrc))
+      setLrcLoading(false)
+      if (rec.status === 'fulfilled') setRecommendations(rec.value.recommendations || [])
+      setRecLoading(false)
+    }
+
+    loadDetail()
+    loadSecondary()
+
     return () => { cancelled = true }
   }, [id])
 
@@ -189,7 +205,12 @@ export default function SongDetailPage() {
               }}>
                 <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)' }}>歌词</h3>
               </div>
-              <LyricsScroller lyrics={lrcLines} audioRef={playerRef} />
+              {lrcLoading
+              ? <div style={{ height: '12rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Loader2 size={20} className="animate-spin" style={{ color: 'var(--accent-pink)', opacity: 0.5 }} />
+                </div>
+              : <LyricsScroller lyrics={lrcLines} audioRef={playerRef} />
+            }
             </div>
 
             {/* Radar Chart + Review */}
@@ -237,7 +258,13 @@ export default function SongDetailPage() {
         </div>
 
         {/* ── Similar Recommendations ── */}
-        {recommendations.length > 0 && (
+        {recLoading && (
+          <section style={{ marginTop: '4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent-pink)', opacity: 0.5 }} />
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>加载相似推荐…</span>
+          </section>
+        )}
+        {!recLoading && recommendations.length > 0 && (
           <section style={{ marginTop: '4rem' }}>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-serif)', marginBottom: '0.375rem' }}>相似推荐</h2>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>基于评语向量 + 歌词向量的混合融合</p>

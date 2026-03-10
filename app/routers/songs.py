@@ -2,6 +2,7 @@
 歌曲相关接口
 """
 import httpx
+from cachetools import TTLCache
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,9 @@ router = APIRouter()
 _NETEASE_LRC_API = "http://music.163.com/api/song/lyric"
 # 网易云音频外链模板
 _NETEASE_AUDIO_URL = "https://music.163.com/song/media/outer/url?id={song_id}.mp3"
+
+# LRC 缓存：最多 1000 首，24 小时过期
+_lrc_cache: TTLCache = TTLCache(maxsize=1000, ttl=86400)
 
 
 @router.get("/songs/{song_id}", response_model=SongDetail)
@@ -44,6 +48,10 @@ async def get_song_lrc(song_id: str, db: AsyncSession = Depends(get_db)):
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Song not found")
 
+    # 命中缓存直接返回
+    if song_id in _lrc_cache:
+        return _lrc_cache[song_id]
+
     # 从网易云 API 实时获取带时间戳的 LRC 歌词
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -64,7 +72,9 @@ async def get_song_lrc(song_id: str, db: AsyncSession = Depends(get_db)):
     if "tlyric" in data and data["tlyric"].get("lyric"):
         tlyric_text = data["tlyric"]["lyric"]
 
-    return {"id": song_id, "lrc": lrc_text, "tlyric": tlyric_text}
+    payload = {"id": song_id, "lrc": lrc_text, "tlyric": tlyric_text}
+    _lrc_cache[song_id] = payload
+    return payload
 
 
 @router.get("/songs/{song_id}/audio")

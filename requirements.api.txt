@@ -9,3 +9,4 @@ python-dotenv
 httpx
 openai
 jieba
+cachetools

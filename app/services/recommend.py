@@ -6,11 +6,15 @@
 融合公式：
   FinalScore = 0.5 * Sim_review + 0.4 * Sim_lyrics + 0.1 * TF-IDF_overlap
 """
+from cachetools import TTLCache
 from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import Song
 from app.schemas import SongSearchResult
+
+# 推荐缓存：最多 500 首，1 小时过期
+_recommend_cache: TTLCache = TTLCache(maxsize=500, ttl=3600)
 
 
 async def get_similar_songs(
@@ -23,6 +27,10 @@ async def get_similar_songs(
     """
     if source.review_vector is None:
         return []
+
+    cache_key = (source.id, top_k)
+    if cache_key in _recommend_cache:
+        return _recommend_cache[cache_key]
 
     src_review_vec = str(source.review_vector.tolist())
     src_lyrics_vec = str(source.lyrics_vector.tolist()) if source.lyrics_vector is not None else src_review_vec
@@ -74,7 +82,7 @@ async def get_similar_songs(
     })
     rows = result.fetchall()
 
-    return [
+    results = [
         SongSearchResult(
             id=row.id,
             title=row.title,
@@ -92,3 +100,5 @@ async def get_similar_songs(
         )
         for row in rows
     ]
+    _recommend_cache[cache_key] = results
+    return results
