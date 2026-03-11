@@ -33,8 +33,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     # --- Search ---
-    SEARCH_SCORE_THRESHOLD: float = 0.4
-    SEARCH_WEIGHT_VIBE: dict = {"review": 0.6, "lyrics": 0.2, "rational": 0.2}
+    SEARCH_SCORE_THRESHOLD: float = 0.45
+    # vibe: 纯语义，rational 降为 0 避免字面关键词干扰氛围搜索
+    SEARCH_WEIGHT_VIBE: dict = {"review": 0.7, "lyrics": 0.3, "rational": 0.0}
     SEARCH_WEIGHT_LYRICS: dict = {"review": 0.2, "lyrics": 0.6, "rational": 0.2}
     SEARCH_WEIGHT_EXACT: dict = {"review": 0.1, "lyrics": 0.1, "rational": 0.8}
 

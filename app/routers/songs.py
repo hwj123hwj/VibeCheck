@@ -11,6 +11,23 @@ from sqlalchemy import func, select
 from app.database import get_db, Song
 from app.schemas import SongDetail, SongBase
 
+# 噪音行关键词：包含任意一个则整句丢弃
+_NOISE_PATTERNS = [
+    "感谢", "云村", "网易", "@", "业务联系", "来自云村",
+    "本歌曲来自", "此处为", "联系方式", "版权",
+]
+
+def _clean_core_lyrics(text: str | None) -> str | None:
+    """过滤 core_lyrics 中混入的运营/版权噪音句"""
+    if not text:
+        return text
+    sentences = [s.strip() for s in text.split("；") if s.strip()]
+    cleaned = [
+        s for s in sentences
+        if not any(kw in s for kw in _NOISE_PATTERNS)
+    ]
+    return "；".join(cleaned) if cleaned else None
+
 router = APIRouter()
 
 # 网易云歌词 API (返回 LRC 格式，带时间戳)
@@ -29,6 +46,8 @@ async def get_song(song_id: str, db: AsyncSession = Depends(get_db)):
     song = result.scalar_one_or_none()
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
+    # 清洗 core_lyrics 中的运营噪音
+    song.core_lyrics = _clean_core_lyrics(song.core_lyrics)
     return song
 
 
@@ -172,8 +191,63 @@ async def get_random_songs(count: int = 12, db: AsyncSession = Depends(get_db)):
     """随机获取歌曲（首页发现用）"""
     result = await db.execute(
         select(Song)
-        .where(Song.is_duplicate == False, Song.review_text != None)
+        .where(
+            Song.is_duplicate == False,
+            Song.review_text != None,
+            Song.album_cover != None,
+        )
         .order_by(func.random())
         .limit(count)
     )
     return result.scalars().all()
+
+
+# 首页情绪分区的 tag 分组配置
+_VIBE_SECTIONS = [
+    {"key": "late_night",  "label": "深夜独处", "emoji": "🌙", "tags": ["深夜", "孤独", "寂寞", "失眠", "孤寂"]},
+    {"key": "healing",     "label": "治愈解压", "emoji": "🌿", "tags": ["治愈", "温暖", "解压", "舒缓", "轻盈"]},
+    {"key": "love",        "label": "恋爱心动", "emoji": "💕", "tags": ["恋爱", "甜蜜", "心动", "暗恋", "浪漫"]},
+    {"key": "nostalgic",   "label": "怀旧回忆", "emoji": "📷", "tags": ["怀旧", "回忆", "青春", "遗憾", "思念"]},
+    {"key": "energy",      "label": "元气出发", "emoji": "⚡", "tags": ["活力", "励志", "热血", "元气", "积极"]},
+]
+
+
+@router.get("/songs/vibe-sections")
+async def get_vibe_sections(per_section: int = 6, db: AsyncSession = Depends(get_db)):
+    """
+    首页情绪分区接口：按 vibe_tags 聚合，每个情绪区随机返回 N 首歌。
+    只返回有封面、有评语的高质量歌曲。
+    """
+    from sqlalchemy import text as sql_text
+
+    sections = []
+    for section in _VIBE_SECTIONS:
+        # 用 PostgreSQL JSONB 数组包含查询，匹配任意一个 tag
+        tag_conditions = " OR ".join(
+            [f"vibe_tags @> '[\"{ tag }\"]'::jsonb" for tag in section["tags"]]
+        )
+        sql = sql_text(f"""
+            SELECT id, title, artist, album_cover
+            FROM songs
+            WHERE is_duplicate = false
+              AND review_text IS NOT NULL
+              AND album_cover IS NOT NULL
+              AND vibe_tags IS NOT NULL
+              AND ({tag_conditions})
+            ORDER BY random()
+            LIMIT :limit
+        """)
+        result = await db.execute(sql, {"limit": per_section})
+        rows = result.fetchall()
+        if rows:
+            sections.append({
+                "key": section["key"],
+                "label": section["label"],
+                "emoji": section["emoji"],
+                "songs": [
+                    {"id": r.id, "title": r.title, "artist": r.artist, "album_cover": r.album_cover}
+                    for r in rows
+                ],
+            })
+
+    return sections

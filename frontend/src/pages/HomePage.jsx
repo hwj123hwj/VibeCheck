@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { RefreshCw, Sparkles, Music, ArrowRight, PlayCircle } from 'lucide-react'
-import { getRandomSongs } from '../api/client'
+import { getRandomSongs, getVibeSections } from '../api/client'
 import SongCard from '../components/SongCard'
 
 export default function HomePage() {
   const [songs, setSongs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [sections, setSections] = useState([])
+  const [sectionsLoading, setSectionsLoading] = useState(true)
 
   const fetchRandom = async () => {
     setLoading(true)
@@ -22,6 +24,11 @@ export default function HomePage() {
 
   useEffect(() => {
     fetchRandom()
+    // 情绪分区异步加载，不阻塞随机歌曲
+    getVibeSections(6)
+      .then(setSections)
+      .catch(() => {})
+      .finally(() => setSectionsLoading(false))
   }, [])
 
   return (
@@ -141,8 +148,8 @@ export default function HomePage() {
               开始探索
               <ArrowRight size={16} />
             </Link>
-            
-            <button 
+
+            <button
               onClick={fetchRandom}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
@@ -233,6 +240,69 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      {/* ── 情绪分区 ── */}
+      {!sectionsLoading && sections.length > 0 && (
+        <section className="page-container" style={{ paddingBottom: '4rem' }}>
+          <div style={{
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+            marginBottom: '1.5rem', paddingBottom: '0.875rem',
+            borderBottom: '1px solid var(--border-subtle)',
+          }}>
+            <h2 style={{
+              fontSize: '1.375rem',
+              fontFamily: 'var(--font-serif)',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+            }}>
+              <Sparkles size={22} style={{ color: 'var(--accent-pink)' }} />
+              按心情探索
+            </h2>
+            <p style={{
+              fontSize: '0.6875rem',
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              fontWeight: 500,
+            }}>
+              Vibe Sections
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
+            {sections.map((section) => (
+              <div key={section.key}>
+                {/* 分区标题 */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  marginBottom: '1rem',
+                }}>
+                  <span style={{ fontSize: '1.25rem' }}>{section.emoji}</span>
+                  <h3 style={{
+                    fontSize: '1.125rem',
+                    fontWeight: 700,
+                    fontFamily: 'var(--font-serif)',
+                    color: 'var(--text-primary)',
+                  }}>
+                    {section.label}
+                  </h3>
+                </div>
+                {/* 歌曲横向滚动 */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                  gap: '1rem',
+                }}>
+                  {section.songs.map((song, i) => (
+                    <SongCard key={song.id} song={song} index={i} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }
