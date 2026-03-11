@@ -51,7 +51,14 @@ export default function SearchPage() {
   // 挂载时：URL query 与缓存一致则直接复用，否则重新请求
   useEffect(() => {
     const q = searchParams.get('q')
-    if (!q) return
+    // 无 q 参数说明从首页主动进入，清空状态重新开始
+    if (!q) {
+      setResults([])
+      setIntentType(null)
+      setHasSearched(false)
+      cache.current = { query: '', results: [], intentType: null, hasSearched: false }
+      return
+    }
     if (q === cache.current.query && cache.current.hasSearched) {
       // 缓存命中，直接展示，不发请求
       setResults(cache.current.results)
