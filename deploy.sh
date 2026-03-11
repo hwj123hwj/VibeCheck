@@ -149,11 +149,27 @@ EOF
   echo "[deploy] Nginx configured on port 80"
 }
 
-start_backend
-build_frontend
-publish_frontend
-configure_nginx
+# 后端和前端独立部署，互不影响
+BACKEND_OK=true
+FRONTEND_OK=true
 
-echo "[deploy] Full deployment completed"
+start_backend || { echo "[deploy] WARNING: backend deployment failed, continuing with frontend..."; BACKEND_OK=false; }
+build_frontend || { echo "[deploy] WARNING: frontend build failed"; FRONTEND_OK=false; }
+
+if [ "$FRONTEND_OK" = true ]; then
+  publish_frontend || { echo "[deploy] WARNING: frontend publish failed"; FRONTEND_OK=false; }
+fi
+
+configure_nginx || echo "[deploy] WARNING: nginx configuration failed"
+
+echo ""
+echo "[deploy] ========== Deployment Summary =========="
+echo "[deploy] Backend:  $([ "$BACKEND_OK" = true ] && echo 'OK' || echo 'FAILED')"
+echo "[deploy] Frontend: $([ "$FRONTEND_OK" = true ] && echo 'OK' || echo 'FAILED')"
 echo "[deploy] Frontend: http://<server-ip>/"
 echo "[deploy] Backend docs: http://<server-ip>/docs"
+
+# 任何一个失败都以非零退出，让 CI 报错
+if [ "$BACKEND_OK" = false ] || [ "$FRONTEND_OK" = false ]; then
+  exit 1
+fi
