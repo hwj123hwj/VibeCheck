@@ -1,11 +1,14 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
 import { Search, Home, Music } from 'lucide-react'
 import { useState } from 'react'
+import GlobalPlayer from './GlobalPlayer'
+import { usePlayer } from '../context/PlayerContext'
 
 export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [quickSearch, setQuickSearch] = useState('')
+  const { currentSong } = usePlayer()
 
   const handleQuickSearch = (e) => {
     e.preventDefault()
@@ -100,7 +103,8 @@ export default function Layout() {
       </header>
 
       {/* ── Main Content ── */}
-      <main style={{ flex: 1, width: '100%' }}>
+      {/* 有全局播放器时底部留出空间，避免内容被遮挡 */}
+      <main style={{ flex: 1, width: '100%', paddingBottom: currentSong ? '5rem' : 0 }}>
         <Outlet />
       </main>
 
@@ -109,6 +113,7 @@ export default function Layout() {
         borderTop: '1px solid var(--border-subtle)',
         padding: '2rem 0',
         marginTop: '3rem',
+        marginBottom: currentSong ? '5rem' : 0,
         background: 'rgba(245, 241, 232, 0.4)',
         width: '100%',
       }}>
@@ -120,6 +125,9 @@ export default function Layout() {
           <p style={{ opacity: 0.6 }}>毕业设计 Project © 2026</p>
         </div>
       </footer>
+
+      {/* ── 全局底部播放器 ── */}
+      <GlobalPlayer />
     </div>
   )
 }

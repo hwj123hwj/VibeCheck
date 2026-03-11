@@ -1,16 +1,16 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Tag, MapPin, Loader2 } from 'lucide-react'
+import { ArrowLeft, Tag, MapPin, Loader2, Play, Pause, SkipBack, Lock } from 'lucide-react'
 import { getSongDetail, getSongLrc, getRecommendations } from '../api/client'
 import { parseLrc } from '../utils/parseLrc'
-import CompactPlayer from '../components/CompactPlayer'
 import LyricsScroller from '../components/LyricsScroller'
 import VibeRadarChart from '../components/VibeRadarChart'
 import SongCard from '../components/SongCard'
+import { usePlayer } from '../context/PlayerContext'
 
 export default function SongDetailPage() {
   const { id } = useParams()
-  const playerRef = useRef(null)
+  const { loadSong, audioRef, isPlaying, togglePlay, audioError, currentSong } = usePlayer()
 
   const [song, setSong] = useState(null)
   const [lrcLines, setLrcLines] = useState([])
@@ -34,6 +34,8 @@ export default function SongDetailPage() {
         const detail = await getSongDetail(id)
         if (cancelled) return
         setSong(detail)
+        // 加载到全局播放器，保持跨页面持续播放
+        loadSong(detail)
       } catch (err) {
         console.error('Failed to load song detail:', err)
       } finally {
@@ -137,14 +139,70 @@ export default function SongDetailPage() {
               <p style={{ color: 'var(--text-secondary)', marginTop: '0.375rem', fontSize: '0.9375rem' }}>{song.artist}</p>
             </div>
 
-            {/* Player */}
-            <CompactPlayer
-              ref={playerRef}
-              songId={id}
-              title={song.title}
-              artist={song.artist}
-              coverUrl={song.album_cover}
-            />
+            {/* Player — 复用全局播放状态 */}
+            <div style={{
+              borderRadius: 'var(--radius-xl)',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)',
+              padding: '1rem',
+              boxShadow: 'var(--shadow-sm)',
+            }}>
+              {audioError && (
+                <div style={{
+                  marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  borderRadius: 'var(--radius-sm)', background: 'var(--accent-yellow-light)',
+                  border: '1px solid rgba(255, 200, 87, 0.3)',
+                  padding: '0.5rem 0.75rem', fontSize: '0.75rem', color: '#B8860B',
+                }}>
+                  <Lock size={12} />
+                  <span>该歌曲暂不可播放（可能是 VIP 专属）</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                  border: '2px solid var(--border-subtle)',
+                  animation: isPlaying && currentSong?.id === id ? 'spin 8s linear infinite' : 'spin 8s linear infinite paused',
+                }}>
+                  {song.album_cover
+                    ? <img src={song.album_cover} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <div style={{ width: '100%', height: '100%', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontSize: '1rem', opacity: 0.3 }}>♪</span>
+                      </div>
+                  }
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.title}</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.artist}</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                  <button
+                    onClick={() => { if (audioRef.current) { audioRef.current.currentTime = 0 } }}
+                    style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                  >
+                    <SkipBack size={14} />
+                  </button>
+                  <button
+                    onClick={togglePlay}
+                    disabled={audioError}
+                    style={{
+                      width: 40, height: 40, borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: audioError ? '#ccc' : 'var(--accent-pink)',
+                      border: 'none',
+                      cursor: audioError ? 'not-allowed' : 'pointer',
+                      opacity: audioError ? 0.5 : 1,
+                      boxShadow: audioError ? 'none' : 'var(--shadow-pink)',
+                    }}
+                  >
+                    {isPlaying && currentSong?.id === id
+                      ? <Pause size={18} color="white" fill="white" />
+                      : <Play size={18} color="white" fill="white" style={{ marginLeft: 2 }} />
+                    }
+                  </button>
+                </div>
+              </div>
+            </div>
 
             {/* Vibe Tags */}
             {song.vibe_tags && song.vibe_tags.length > 0 && (
@@ -209,7 +267,7 @@ export default function SongDetailPage() {
               ? <div style={{ height: '12rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Loader2 size={20} className="animate-spin" style={{ color: 'var(--accent-pink)', opacity: 0.5 }} />
                 </div>
-              : <LyricsScroller lyrics={lrcLines} audioRef={playerRef} />
+              : <LyricsScroller lyrics={lrcLines} audioRef={audioRef} />
             }
             </div>
 
