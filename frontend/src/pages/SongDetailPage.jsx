@@ -43,21 +43,34 @@ export default function SongDetailPage() {
       }
     }
 
-    // LRC 和推荐异步加载，不阻塞主内容
-    const loadSecondary = async () => {
-      const [lrc, rec] = await Promise.allSettled([
-        getSongLrc(id),
-        getRecommendations(id, 6),
-      ])
-      if (cancelled) return
-      if (lrc.status === 'fulfilled') setLrcLines(parseLrc(lrc.value.lrc))
-      setLrcLoading(false)
-      if (rec.status === 'fulfilled') setRecommendations(rec.value.recommendations || [])
-      setRecLoading(false)
+    // LRC 和推荐完全独立加载，谁先回来谁先显示
+    const loadLrc = async () => {
+      try {
+        const lrc = await getSongLrc(id)
+        if (cancelled) return
+        setLrcLines(parseLrc(lrc.lrc))
+      } catch (err) {
+        console.error('Failed to load lrc:', err)
+      } finally {
+        if (!cancelled) setLrcLoading(false)
+      }
+    }
+
+    const loadRec = async () => {
+      try {
+        const rec = await getRecommendations(id, 6)
+        if (cancelled) return
+        setRecommendations(rec.recommendations || [])
+      } catch (err) {
+        console.error('Failed to load recommendations:', err)
+      } finally {
+        if (!cancelled) setRecLoading(false)
+      }
     }
 
     loadDetail()
-    loadSecondary()
+    loadLrc()
+    loadRec()
 
     return () => { cancelled = true }
   }, [id])
