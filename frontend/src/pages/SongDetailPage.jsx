@@ -155,7 +155,20 @@ export default function SongDetailPage() {
                   padding: '0.5rem 0.75rem', fontSize: '0.75rem', color: '#B8860B',
                 }}>
                   <Lock size={12} />
-                  <span>该歌曲暂不可播放（可能是 VIP 专属）</span>
+                  <span>VIP 专属歌曲，</span>
+                  <a
+                    href={`https://music.163.com/#/song?id=${id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: '#B8860B',
+                      fontWeight: 600,
+                      textDecoration: 'underline',
+                      textUnderlineOffset: '2px',
+                    }}
+                  >
+                    前往网易云开通会员收听 →
+                  </a>
                 </div>
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
