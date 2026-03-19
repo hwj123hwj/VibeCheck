@@ -40,34 +40,34 @@ async def get_similar_songs(
         src_tfidf_keys = list(source.tfidf_vector.keys())[:20]
 
     recommend_sql = sql_text("""
+        WITH candidates AS (
+            SELECT
+                id, title, artist, album_cover,
+                vibe_tags, review_text, core_lyrics,
+                (1 - (review_vector <=> CAST(:src_review_vec AS vector))) AS review_sim,
+                COALESCE(1 - (lyrics_vector <=> CAST(:src_lyrics_vec AS vector)), 0) AS lyrics_sim,
+                COALESCE(
+                    (
+                        SELECT COUNT(*)::float
+                        FROM jsonb_object_keys(COALESCE(tfidf_vector, '{}'::jsonb)) AS k(key)
+                        WHERE k.key = ANY(CAST(:src_tfidf_keys AS text[]))
+                    ) / NULLIF(:src_tfidf_len, 0),
+                    0
+                ) AS tfidf_overlap
+            FROM songs
+            WHERE id != :src_id
+              AND review_vector IS NOT NULL
+              AND is_duplicate = false
+        )
         SELECT
             id, title, artist, album_cover,
             vibe_tags, review_text, core_lyrics,
-            (1 - (review_vector <=> CAST(:src_review_vec AS vector))) AS review_sim,
-            COALESCE(1 - (lyrics_vector <=> CAST(:src_lyrics_vec AS vector)), 0) AS lyrics_sim,
-            COALESCE(
-                (
-                    SELECT COUNT(*)::float
-                    FROM jsonb_object_keys(COALESCE(tfidf_vector, '{}'::jsonb)) AS k(key)
-                    WHERE k.key = ANY(CAST(:src_tfidf_keys AS text[]))
-                ) / NULLIF(:src_tfidf_len, 0),
-                0
-            ) AS tfidf_overlap
-        FROM songs
-        WHERE id != :src_id
-          AND review_vector IS NOT NULL
-          AND is_duplicate = false
+            review_sim, lyrics_sim, tfidf_overlap
+        FROM candidates
         ORDER BY
-            (1 - (review_vector <=> CAST(:src_review_vec AS vector))) * 0.5
-            + COALESCE(1 - (lyrics_vector <=> CAST(:src_lyrics_vec AS vector)), 0) * 0.4
-            + COALESCE(
-                (
-                    SELECT COUNT(*)::float
-                    FROM jsonb_object_keys(COALESCE(tfidf_vector, '{}'::jsonb)) AS k(key)
-                    WHERE k.key = ANY(CAST(:src_tfidf_keys AS text[]))
-                ) / NULLIF(:src_tfidf_len, 0),
-                0
-            ) * 0.1
+            review_sim * 0.5
+            + lyrics_sim * 0.4
+            + tfidf_overlap * 0.1
             DESC
         LIMIT :limit
     """)

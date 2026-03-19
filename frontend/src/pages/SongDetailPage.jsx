@@ -18,6 +18,7 @@ export default function SongDetailPage() {
   const [loading, setLoading] = useState(true)
   const [lrcLoading, setLrcLoading] = useState(true)
   const [recLoading, setRecLoading] = useState(true)
+  const [recError, setRecError] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -30,6 +31,7 @@ export default function SongDetailPage() {
       setRecommendations([])
       setLrcLoading(true)
       setRecLoading(true)
+      setRecError(false)
       try {
         const detail = await getSongDetail(id)
         if (cancelled) return
@@ -63,6 +65,7 @@ export default function SongDetailPage() {
         setRecommendations(rec.recommendations || [])
       } catch (err) {
         console.error('Failed to load recommendations:', err)
+        if (!cancelled) setRecError(true)
       } finally {
         if (!cancelled) setRecLoading(false)
       }
@@ -346,6 +349,11 @@ export default function SongDetailPage() {
           <section style={{ marginTop: '4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent-pink)', opacity: 0.5 }} />
             <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>加载相似推荐…</span>
+          </section>
+        )}
+        {!recLoading && recError && (
+          <section style={{ marginTop: '4rem' }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>推荐加载失败，请刷新页面重试。</p>
           </section>
         )}
         {!recLoading && recommendations.length > 0 && (
