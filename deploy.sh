@@ -53,8 +53,20 @@ start_backend() {
   fi
 
   . .venv/bin/activate
-  python -m pip install --upgrade pip
-  python -m pip install -r requirements.api.txt
+
+  # 只在 requirements.api.txt 有变化时才重装依赖
+  REQ_HASH_FILE=".venv/.req_hash"
+  REQ_HASH_NOW="$(md5sum requirements.api.txt | cut -d' ' -f1)"
+  REQ_HASH_PREV="$(cat "$REQ_HASH_FILE" 2>/dev/null || echo '')"
+
+  if [ "$REQ_HASH_NOW" != "$REQ_HASH_PREV" ]; then
+    echo "[deploy] requirements.api.txt changed, reinstalling dependencies..."
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.api.txt
+    echo "$REQ_HASH_NOW" > "$REQ_HASH_FILE"
+  else
+    echo "[deploy] requirements.api.txt unchanged, skipping pip install"
+  fi
 
   mkdir -p logs
 
@@ -70,7 +82,20 @@ start_backend() {
 build_frontend() {
   ensure_node
   cd "$APP_DIR/frontend"
-  npm ci --no-audit --no-fund
+
+  # 只在 package-lock.json 有变化时才重装 node_modules
+  LOCK_HASH_FILE="node_modules/.lock_hash"
+  LOCK_HASH_NOW="$(md5sum package-lock.json | cut -d' ' -f1)"
+  LOCK_HASH_PREV="$(cat "$LOCK_HASH_FILE" 2>/dev/null || echo '')"
+
+  if [ "$LOCK_HASH_NOW" != "$LOCK_HASH_PREV" ]; then
+    echo "[deploy] package-lock.json changed, reinstalling node_modules..."
+    npm ci --no-audit --no-fund
+    echo "$LOCK_HASH_NOW" > "$LOCK_HASH_FILE"
+  else
+    echo "[deploy] package-lock.json unchanged, skipping npm install"
+  fi
+
   npm run build
   cd "$APP_DIR"
   echo "[deploy] Frontend build completed"
