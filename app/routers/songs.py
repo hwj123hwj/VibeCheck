@@ -39,6 +39,62 @@ _NETEASE_AUDIO_URL = "https://music.163.com/song/media/outer/url?id={song_id}.mp
 _lrc_cache: TTLCache = TTLCache(maxsize=1000, ttl=86400)
 
 
+@router.get("/songs/random/list", response_model=list[SongBase])
+async def get_random_songs(count: int = 12, db: AsyncSession = Depends(get_db)):
+    """随机获取歌曲（首页发现用）"""
+    result = await db.execute(
+        select(Song)
+        .where(
+            Song.is_duplicate == False,
+            Song.review_text != None,
+            Song.album_cover != None,
+        )
+        .order_by(func.random())
+        .limit(count)
+    )
+    return result.scalars().all()
+
+
+@router.get("/songs/vibe-sections")
+async def get_vibe_sections(per_section: int = 6, db: AsyncSession = Depends(get_db)):
+    """
+    首页情绪分区接口：按 vibe_tags 聚合，每个情绪区随机返回 N 首歌。
+    只返回有封面、有评语的高质量歌曲。
+    """
+    from sqlalchemy import text as sql_text
+
+    sections = []
+    for section in _VIBE_SECTIONS:
+        tag_conditions = " OR ".join(
+            [f"vibe_tags @> '[\"{ tag }\"]'::jsonb" for tag in section["tags"]]
+        )
+        sql = sql_text(f"""
+            SELECT id, title, artist, album_cover
+            FROM songs
+            WHERE is_duplicate = false
+              AND review_text IS NOT NULL
+              AND album_cover IS NOT NULL
+              AND vibe_tags IS NOT NULL
+              AND ({tag_conditions})
+            ORDER BY random()
+            LIMIT :limit
+        """)
+        result = await db.execute(sql, {"limit": per_section})
+        rows = result.fetchall()
+        if rows:
+            sections.append({
+                "key": section["key"],
+                "label": section["label"],
+                "emoji": section["emoji"],
+                "songs": [
+                    {"id": r.id, "title": r.title, "artist": r.artist, "album_cover": r.album_cover}
+                    for r in rows
+                ],
+            })
+
+    return sections
+
+
 @router.get("/songs/{song_id}", response_model=SongDetail)
 async def get_song(song_id: str, db: AsyncSession = Depends(get_db)):
     """获取单首歌曲详情"""
@@ -186,22 +242,6 @@ def _make_streaming_response(
     )
 
 
-@router.get("/songs/random/list", response_model=list[SongBase])
-async def get_random_songs(count: int = 12, db: AsyncSession = Depends(get_db)):
-    """随机获取歌曲（首页发现用）"""
-    result = await db.execute(
-        select(Song)
-        .where(
-            Song.is_duplicate == False,
-            Song.review_text != None,
-            Song.album_cover != None,
-        )
-        .order_by(func.random())
-        .limit(count)
-    )
-    return result.scalars().all()
-
-
 # 首页情绪分区的 tag 分组配置
 _VIBE_SECTIONS = [
     {"key": "late_night",  "label": "深夜独处", "emoji": "🌙", "tags": ["深夜", "孤独", "寂寞", "失眠", "孤寂"]},
@@ -212,42 +252,4 @@ _VIBE_SECTIONS = [
 ]
 
 
-@router.get("/songs/vibe-sections")
-async def get_vibe_sections(per_section: int = 6, db: AsyncSession = Depends(get_db)):
-    """
-    首页情绪分区接口：按 vibe_tags 聚合，每个情绪区随机返回 N 首歌。
-    只返回有封面、有评语的高质量歌曲。
-    """
-    from sqlalchemy import text as sql_text
 
-    sections = []
-    for section in _VIBE_SECTIONS:
-        # 用 PostgreSQL JSONB 数组包含查询，匹配任意一个 tag
-        tag_conditions = " OR ".join(
-            [f"vibe_tags @> '[\"{ tag }\"]'::jsonb" for tag in section["tags"]]
-        )
-        sql = sql_text(f"""
-            SELECT id, title, artist, album_cover
-            FROM songs
-            WHERE is_duplicate = false
-              AND review_text IS NOT NULL
-              AND album_cover IS NOT NULL
-              AND vibe_tags IS NOT NULL
-              AND ({tag_conditions})
-            ORDER BY random()
-            LIMIT :limit
-        """)
-        result = await db.execute(sql, {"limit": per_section})
-        rows = result.fetchall()
-        if rows:
-            sections.append({
-                "key": section["key"],
-                "label": section["label"],
-                "emoji": section["emoji"],
-                "songs": [
-                    {"id": r.id, "title": r.title, "artist": r.artist, "album_cover": r.album_cover}
-                    for r in rows
-                ],
-            })
-
-    return sections
