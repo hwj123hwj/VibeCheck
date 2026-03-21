@@ -25,7 +25,10 @@ export const searchSongs = (query, topK = 10) =>
   api.get('/search', { params: { q: query, top_k: topK } }).then(r => r.data)
 
 // ── Recommend ──────────────────────────
-export const getRecommendations = (songId, topK = 10) =>
-  api.get(`/recommend/${songId}`, { params: { top_k: topK }, timeout: 30000 }).then(r => r.data)
+export const getRecommendations = (songId, topK = 10, weights = {}) =>
+  api.get(`/recommend/${songId}`, {
+    params: { top_k: topK, ...weights },
+    timeout: 30000,
+  }).then(r => r.data)
 
 export default api

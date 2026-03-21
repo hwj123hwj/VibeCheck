@@ -18,17 +18,18 @@ _recommend_cache: TTLCache = TTLCache(maxsize=500, ttl=3600)
 
 
 async def get_similar_songs(
-    source: Song, top_k: int, db: AsyncSession
+    source: Song, top_k: int, db: AsyncSession,
+    w_review: float = 0.5, w_lyrics: float = 0.4, w_tfidf: float = 0.1,
 ) -> list[SongSearchResult]:
     """
     给定一首歌，返回最相似的 Top-K 推荐
 
-    双向量余弦相似 + TF-IDF 关键词重叠（参数化 SQL）
+    双向量余弦相似 + TF-IDF 关键词重叠（参数化 SQL），权重可动态调整
     """
     if source.review_vector is None:
         return []
 
-    cache_key = (source.id, top_k)
+    cache_key = (source.id, top_k, w_review, w_lyrics, w_tfidf)
     if cache_key in _recommend_cache:
         return _recommend_cache[cache_key]
 
@@ -65,9 +66,9 @@ async def get_similar_songs(
             review_sim, lyrics_sim, tfidf_overlap
         FROM candidates
         ORDER BY
-            review_sim * 0.5
-            + lyrics_sim * 0.4
-            + tfidf_overlap * 0.1
+            review_sim * :w_review
+            + lyrics_sim * :w_lyrics
+            + tfidf_overlap * :w_tfidf
             DESC
         LIMIT :limit
     """)
@@ -79,6 +80,9 @@ async def get_similar_songs(
         "src_tfidf_keys": src_tfidf_keys,
         "src_tfidf_len": len(src_tfidf_keys),
         "limit": top_k,
+        "w_review": w_review,
+        "w_lyrics": w_lyrics,
+        "w_tfidf": w_tfidf,
     })
     rows = result.fetchall()
 
@@ -92,9 +96,9 @@ async def get_similar_songs(
             vibe_tags=row.vibe_tags,
             core_lyrics=row.core_lyrics,
             score=round(
-                float(row.review_sim) * 0.5
-                + float(row.lyrics_sim) * 0.4
-                + float(row.tfidf_overlap) * 0.1,
+                float(row.review_sim) * w_review
+                + float(row.lyrics_sim) * w_lyrics
+                + float(row.tfidf_overlap) * w_tfidf,
                 4,
             ),
         )

@@ -19,6 +19,9 @@ export default function SongDetailPage() {
   const [lrcLoading, setLrcLoading] = useState(true)
   const [recLoading, setRecLoading] = useState(true)
   const [recError, setRecError] = useState(false)
+  const [wReview, setWReview] = useState(0.5)
+  const [wLyrics, setWLyrics] = useState(0.4)
+  const wTfidf = Math.max(0, parseFloat((1 - wReview - wLyrics).toFixed(2)))
 
   useEffect(() => {
     let cancelled = false
@@ -58,9 +61,9 @@ export default function SongDetailPage() {
       }
     }
 
-    const loadRec = async () => {
+    const loadRec = async (weights) => {
       try {
-        const rec = await getRecommendations(id, 6)
+        const rec = await getRecommendations(id, 6, weights)
         if (cancelled) return
         setRecommendations(rec.recommendations || [])
       } catch (err) {
@@ -73,7 +76,7 @@ export default function SongDetailPage() {
 
     loadDetail()
     loadLrc()
-    loadRec()
+    loadRec({})
 
     return () => { cancelled = true }
   }, [id])
@@ -81,6 +84,19 @@ export default function SongDetailPage() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [id])
+
+  const handleRecommend = () => {
+    const tfidf = Math.max(0, parseFloat((1 - wReview - wLyrics).toFixed(2)))
+    setRecLoading(true)
+    setRecError(false)
+    setRecommendations([])
+    let cancelled = false
+    getRecommendations(id, 6, { w_review: wReview, w_lyrics: wLyrics, w_tfidf: tfidf })
+      .then(rec => { if (!cancelled) setRecommendations(rec.recommendations || []) })
+      .catch(err => { console.error(err); if (!cancelled) setRecError(true) })
+      .finally(() => { if (!cancelled) setRecLoading(false) })
+    return () => { cancelled = true }
+  }
 
   if (loading) {
     return (
@@ -345,8 +361,95 @@ export default function SongDetailPage() {
         </div>
 
         {/* ── Similar Recommendations ── */}
+        {/* 权重调节面板 — 始终展示 */}
+        <section style={{ marginTop: '4rem' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-serif)', marginBottom: '0.25rem' }}>相似推荐</h2>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>基于评语向量 + 歌词向量 + TF-IDF 的混合融合</p>
+
+          <div style={{
+            borderRadius: 'var(--radius-xl)', background: 'var(--bg-card)',
+            border: '1px solid var(--border-subtle)', padding: '1.25rem 1.5rem',
+            marginBottom: '1.5rem',
+          }}>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '1rem' }}>
+              权重调节
+            </p>
+
+            {/* w_review */}
+            <div style={{ marginBottom: '0.875rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>评语向量</span>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--accent-pink)', fontVariantNumeric: 'tabular-nums' }}>{wReview.toFixed(2)}</span>
+              </div>
+              <input
+                type="range" min={0} max={1} step={0.05}
+                value={wReview}
+                onChange={e => {
+                  const v = parseFloat(e.target.value)
+                  if (v + wLyrics > 1) return
+                  setWReview(v)
+                }}
+                style={{ width: '100%', accentColor: 'var(--accent-pink)' }}
+              />
+            </div>
+
+            {/* w_lyrics */}
+            <div style={{ marginBottom: '0.875rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>歌词向量</span>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--accent-pink)', fontVariantNumeric: 'tabular-nums' }}>{wLyrics.toFixed(2)}</span>
+              </div>
+              <input
+                type="range" min={0} max={1} step={0.05}
+                value={wLyrics}
+                onChange={e => {
+                  const v = parseFloat(e.target.value)
+                  if (wReview + v > 1) return
+                  setWLyrics(v)
+                }}
+                style={{ width: '100%', accentColor: 'var(--accent-pink)' }}
+              />
+            </div>
+
+            {/* w_tfidf 只读 */}
+            <div style={{ marginBottom: '1.125rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>TF-IDF 关键词 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(自动)</span></span>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{wTfidf.toFixed(2)}</span>
+              </div>
+              <div style={{
+                height: '4px', borderRadius: '2px',
+                background: 'var(--border-subtle)', overflow: 'hidden',
+              }}>
+                <div style={{
+                  height: '100%', borderRadius: '2px',
+                  width: `${wTfidf * 100}%`,
+                  background: 'var(--text-muted)', opacity: 0.4,
+                  transition: 'width 0.15s',
+                }} />
+              </div>
+            </div>
+
+            <button
+              onClick={handleRecommend}
+              disabled={recLoading}
+              style={{
+                width: '100%', padding: '0.5rem',
+                borderRadius: 'var(--radius-lg)',
+                background: recLoading ? 'var(--bg-elevated)' : 'var(--accent-pink)',
+                color: recLoading ? 'var(--text-muted)' : 'white',
+                border: 'none', cursor: recLoading ? 'not-allowed' : 'pointer',
+                fontSize: '0.875rem', fontWeight: 600,
+                transition: 'background 0.2s',
+              }}
+            >
+              {recLoading ? '推荐中…' : '开始推荐'}
+            </button>
+          </div>
+        </section>
+
         {recLoading && (
-          <section style={{ marginTop: '4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <section style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
             <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent-pink)', opacity: 0.5 }} />
             <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>加载相似推荐…</span>
           </section>
@@ -357,9 +460,7 @@ export default function SongDetailPage() {
           </section>
         )}
         {!recLoading && recommendations.length > 0 && (
-          <section style={{ marginTop: '4rem' }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-serif)', marginBottom: '0.375rem' }}>相似推荐</h2>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>基于评语向量 + 歌词向量的混合融合</p>
+          <section>
             <div className="stagger-children" style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
