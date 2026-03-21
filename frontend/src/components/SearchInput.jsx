@@ -33,16 +33,19 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
     { key: 'auto',   label: '自动识别', placeholder: '描述心情、粘贴歌词、或直接搜歌名…', hint: 'LLM 正在解析你的意图…' },
     { key: 'vibe',   label: '心情氛围', placeholder: '描述你现在的心情或场景…',           hint: '向量语义检索中…' },
     { key: 'lyrics', label: '搜歌词',   placeholder: '粘贴一段你记得的歌词…',             hint: '歌词语义匹配中…' },
-    { key: 'exact',  label: '搜歌名',   placeholder: '输入歌手名或歌曲名…',               hint: '关键词匹配中…' },
+    { key: 'title',  label: '搜歌名',   placeholder: '输入歌曲名…',                       hint: '歌名匹配中…' },
+    { key: 'artist', label: '搜歌手',   placeholder: '输入歌手名…',                       hint: '歌手匹配中…' },
   ]
 
   const currentMode = MODES.find(m => m.key === mode) || MODES[0]
 
   const intentLabels = {
-    vibe: '心情氛围',
+    vibe:   '心情氛围',
     lyrics: '搜歌词',
-    exact: '搜歌名',
-    auto: '自动识别',
+    exact:  '搜歌名',
+    auto:   '自动识别',
+    title:  '搜歌名',
+    artist: '搜歌手',
   }
 
   // Example prompts
