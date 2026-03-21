@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, Sparkles, Loader2 } from 'lucide-react'
+import { Search, Sparkles, Loader2, ChevronDown } from 'lucide-react'
 
 /**
  * SearchInput — 集成 LLM 意图解析动画的搜索框
@@ -29,10 +29,20 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
     }
   }
 
+  const MODES = [
+    { key: 'auto',   label: '自动识别', placeholder: '描述心情、粘贴歌词、或直接搜歌名…', hint: 'LLM 正在解析你的意图…' },
+    { key: 'vibe',   label: '心情氛围', placeholder: '描述你现在的心情或场景…',           hint: '向量语义检索中…' },
+    { key: 'lyrics', label: '搜歌词',   placeholder: '粘贴一段你记得的歌词…',             hint: '歌词语义匹配中…' },
+    { key: 'exact',  label: '搜歌名',   placeholder: '输入歌手名或歌曲名…',               hint: '关键词匹配中…' },
+  ]
+
+  const currentMode = MODES.find(m => m.key === mode) || MODES[0]
+
   const intentLabels = {
-    vibe: '氛围感知',
-    lyrics: '歌词语义',
-    exact: '精确匹配',
+    vibe: '心情氛围',
+    lyrics: '搜歌词',
+    exact: '搜歌名',
+    auto: '自动识别',
   }
 
   // Example prompts
@@ -65,35 +75,73 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
             overflow: 'hidden',
             transition: 'border-color 0.3s, box-shadow 0.3s',
           }}>
-            {/* Icon — absolutely positioned, never overlaps text */}
+            {/* 左侧模式下拉框 */}
             <div style={{
-              position: 'absolute',
-              left: '1.125rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0,
+              borderRight: '1px solid var(--border-subtle)',
+              height: '100%',
+            }}>
+              <select
+                value={mode}
+                onChange={e => setMode(e.target.value)}
+                disabled={isLoading}
+                style={{
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  padding: '0 2rem 0 0.875rem',
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  color: 'var(--accent-pink)',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  height: '100%',
+                  minWidth: '5.5rem',
+                }}
+              >
+                {MODES.map(m => (
+                  <option key={m.key} value={m.key}>{m.label}</option>
+                ))}
+              </select>
+              <ChevronDown size={13} style={{
+                position: 'absolute',
+                right: '0.5rem',
+                pointerEvents: 'none',
+                color: 'var(--accent-pink)',
+                opacity: 0.7,
+              }} />
+            </div>
+
+            {/* 搜索图标 */}
+            <div style={{
+              padding: '0 0.625rem 0 0.75rem',
               color: isLoading ? 'var(--accent-pink)' : 'var(--text-muted)',
               pointerEvents: 'none',
               display: 'flex',
               alignItems: 'center',
+              flexShrink: 0,
             }}>
-              {isLoading ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                <Search size={20} />
-              )}
+              {isLoading
+                ? <Loader2 size={18} className="animate-spin" />
+                : <Search size={18} />
+              }
             </div>
+
             <input
               ref={inputRef}
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="描述你想要的音乐氛围..."
-              className="search-input-with-icon"
+              placeholder={currentMode.placeholder}
               style={{
                 flex: 1,
                 paddingTop: '1rem',
                 paddingBottom: '1rem',
-                paddingRight: '1rem',
+                paddingRight: '0.5rem',
                 background: 'transparent',
                 color: 'var(--text-primary)',
                 fontSize: '1rem',
@@ -121,51 +169,17 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
               onMouseEnter={(e) => { if (!isLoading && query.trim()) e.currentTarget.style.background = 'var(--accent-pink-dim)' }}
               onMouseLeave={(e) => { if (!isLoading && query.trim()) e.currentTarget.style.background = 'var(--accent-pink)' }}
             >
-              {isLoading ? '解析中...' : '搜索'}
+              {isLoading ? '搜索中…' : '搜索'}
             </button>
           </div>
         </div>
       </form>
 
-      {/* Mode Selector */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '0.875rem' }}>
-        {[
-          { key: 'auto',  label: '自动识别', desc: 'LLM 智能路由' },
-          { key: 'vibe',  label: '氛围感知', desc: '纯语义向量' },
-          { key: 'exact', label: '精确匹配', desc: '关键词搜索' },
-        ].map(({ key, label, desc }) => {
-          const active = mode === key
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setMode(key)}
-              title={desc}
-              style={{
-                padding: '0.3rem 0.9rem',
-                borderRadius: 'var(--radius-full)',
-                fontSize: '0.75rem',
-                fontWeight: active ? 600 : 400,
-                border: active ? '1px solid var(--accent-pink)' : '1px solid var(--border-subtle)',
-                background: active ? 'var(--accent-pink-light)' : 'var(--bg-elevated)',
-                color: active ? 'var(--accent-pink)' : 'var(--text-muted)',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              {label}
-            </button>
-          )
-        })}
-      </div>
-
       {/* Intent Indicator */}
       {isLoading && (
         <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--accent-pink)' }} className="animate-pulse">
           <Sparkles size={14} />
-          <span>
-            {mode === 'auto' ? 'LLM 正在解析你的意图...' : mode === 'vibe' ? '向量语义检索中...' : '关键词匹配中...'}
-          </span>
+          <span>{currentMode.hint}</span>
         </div>
       )}
 

@@ -143,12 +143,20 @@ async def perform_hybrid_search(
         ]
         return SearchResponse(query=user_query, intent_type="exact", results=results)
 
-    # ── 手动指定 vibe 模式：跳过 LLM，直接向量化搜索 ──
+    # ── 手动指定 vibe 模式：跳过 LLM，直接氛围语义搜索 ──
     if mode == "vibe":
         query_vec = await get_embedding(user_query)
         intent_type = "vibe"
         weights = WEIGHT_MAP["vibe"]
         intent = {}
+
+    # ── 手动指定 lyrics 模式：跳过 LLM，歌词向量 + 关键词混合 ──
+    elif mode == "lyrics":
+        query_vec = await get_embedding(user_query)
+        intent_type = "lyrics"
+        weights = WEIGHT_MAP["lyrics"]
+        intent = {}
+
     else:
         # ── 自动模式：LLM 意图解析 与 Embedding 向量化 并发执行 ──
         intent, query_vec = await asyncio.gather(
