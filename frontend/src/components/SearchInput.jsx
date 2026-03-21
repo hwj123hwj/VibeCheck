@@ -6,13 +6,14 @@ import { Search, Sparkles, Loader2 } from 'lucide-react'
  * SearchInput — 集成 LLM 意图解析动画的搜索框
  *
  * Props:
- *   - onSearch: (query: string) => void
+ *   - onSearch: (query: string, mode: string) => void
  *   - isLoading: boolean
  *   - intentType: string | null  ("vibe" | "lyrics" | "exact")
  */
 export default function SearchInput({ onSearch, isLoading = false, intentType = null }) {
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || '')
+  const [mode, setMode] = useState('auto')
   const inputRef = useRef(null)
 
   // 同步 URL params
@@ -24,7 +25,7 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
   const handleSubmit = (e) => {
     e.preventDefault()
     if (query.trim() && !isLoading) {
-      onSearch(query.trim())
+      onSearch(query.trim(), mode)
     }
   }
 
@@ -45,7 +46,7 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
 
   const handleExample = (text) => {
     setQuery(text)
-    onSearch(text)
+    onSearch(text, mode)
   }
 
   return (
@@ -126,11 +127,45 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
         </div>
       </form>
 
+      {/* Mode Selector */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '0.875rem' }}>
+        {[
+          { key: 'auto',  label: '自动识别', desc: 'LLM 智能路由' },
+          { key: 'vibe',  label: '氛围感知', desc: '纯语义向量' },
+          { key: 'exact', label: '精确匹配', desc: '关键词搜索' },
+        ].map(({ key, label, desc }) => {
+          const active = mode === key
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setMode(key)}
+              title={desc}
+              style={{
+                padding: '0.3rem 0.9rem',
+                borderRadius: 'var(--radius-full)',
+                fontSize: '0.75rem',
+                fontWeight: active ? 600 : 400,
+                border: active ? '1px solid var(--accent-pink)' : '1px solid var(--border-subtle)',
+                background: active ? 'var(--accent-pink-light)' : 'var(--bg-elevated)',
+                color: active ? 'var(--accent-pink)' : 'var(--text-muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              {label}
+            </button>
+          )
+        })}
+      </div>
+
       {/* Intent Indicator */}
       {isLoading && (
         <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--accent-pink)' }} className="animate-pulse">
           <Sparkles size={14} />
-          <span>LLM 正在解析你的意图...</span>
+          <span>
+            {mode === 'auto' ? 'LLM 正在解析你的意图...' : mode === 'vibe' ? '向量语义检索中...' : '关键词匹配中...'}
+          </span>
         </div>
       )}
 

@@ -1,6 +1,7 @@
 """
 语义搜索接口
 """
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,14 +16,14 @@ router = APIRouter()
 async def search_songs(
     q: str = Query(..., min_length=1, max_length=200, description="自然语言搜索词"),
     top_k: int = Query(10, ge=1, le=50),
+    mode: Optional[str] = Query(None, description="搜索模式: auto | vibe | exact"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     语义搜索歌曲
 
-    支持：
-    - 情感/场景描述: "下雨天适合听的伤感歌"
-    - 歌词片段: "后来我总算学会了如何去爱"
-    - 精确搜索: "周杰伦 晴天"
+    mode=auto (默认): LLM 自动识别意图
+    mode=vibe: 直接走氛围语义搜索，跳过 LLM
+    mode=exact: 直接走精确关键词匹配，跳过 LLM 和 Embedding
     """
-    return await perform_hybrid_search(q, top_k, db)
+    return await perform_hybrid_search(q, top_k, db, mode=mode)

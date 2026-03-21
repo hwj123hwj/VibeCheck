@@ -21,8 +21,8 @@ export const getVibeSections = (perSection = 6) =>
   api.get('/songs/vibe-sections', { params: { per_section: perSection } }).then(r => r.data)
 
 // ── Search ─────────────────────────────
-export const searchSongs = (query, topK = 10) =>
-  api.get('/search', { params: { q: query, top_k: topK } }).then(r => r.data)
+export const searchSongs = (query, topK = 10, mode = null) =>
+  api.get('/search', { params: { q: query, top_k: topK, ...(mode ? { mode } : {}) } }).then(r => r.data)
 
 // ── Recommend ──────────────────────────
 export const getRecommendations = (songId, topK = 10, weights = {}) =>

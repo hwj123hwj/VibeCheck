@@ -19,7 +19,7 @@ export default function SearchPage() {
   // Track the latest search to ignore stale responses
   const searchIdRef = useRef(0)
 
-  const handleSearch = useCallback(async (query) => {
+  const handleSearch = useCallback(async (query, mode = 'auto') => {
     const thisSearchId = ++searchIdRef.current
 
     setIsLoading(true)
@@ -28,7 +28,7 @@ export default function SearchPage() {
     setSearchParams({ q: query }, { replace: true })
 
     try {
-      const data = await searchSongs(query, 20)
+      const data = await searchSongs(query, 20, mode === 'auto' ? null : mode)
       if (searchIdRef.current !== thisSearchId) return
       const newResults = data.results || []
       const newIntentType = data.intent_type || null

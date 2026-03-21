@@ -87,30 +87,49 @@ async def _exact_search(
 
 
 async def perform_hybrid_search(
-    user_query: str, top_k: int, db: AsyncSession
+    user_query: str, top_k: int, db: AsyncSession,
+    mode: str | None = None,
 ) -> SearchResponse:
-    """执行混合搜索并返回结构化结果"""
+    """执行混合搜索并返回结构化结果
 
-    # 1. LLM 意图解析 与 Embedding 向量化 并发执行，节省一个串行等待
-    intent, query_vec = await asyncio.gather(
-        parse_search_intent(user_query),
-        get_embedding(user_query),
-    )
+    mode=None/auto : LLM 自动识别意图（默认）
+    mode=vibe      : 直接走氛围语义，跳过 LLM
+    mode=exact     : 直接走精确关键词匹配，跳过 LLM 和 Embedding
+    """
 
-    intent_type = intent.get("type", "vibe")
-    weights = WEIGHT_MAP.get(intent_type, WEIGHT_MAP["vibe"])
-
-    # exact 类型：有明确歌手或歌名，直接精确匹配，跳过向量计算
-    if intent_type == "exact" and (intent.get("artist") or intent.get("title")):
+    # ── 手动指定 exact 模式：直接精确匹配，最快 ──
+    if mode == "exact":
+        intent = {"type": "exact", "title": user_query, "artist": user_query}
         results = await _exact_search(intent, top_k, db)
-        # 精确匹配无结果时降级为混合搜索
-        if results:
-            return SearchResponse(query=user_query, intent_type=intent_type, results=results)
+        return SearchResponse(query=user_query, intent_type="exact", results=results)
 
-    # 若 LLM 提取的 vibe 与原始 query 不同，则单独向量化 vibe（通常发生在 exact 类型）
-    vibe_query = intent.get("vibe") or user_query
-    if vibe_query != user_query:
-        query_vec = await get_embedding(vibe_query)
+    # ── 手动指定 vibe 模式：跳过 LLM，直接向量化搜索 ──
+    if mode == "vibe":
+        query_vec = await get_embedding(user_query)
+        intent_type = "vibe"
+        weights = WEIGHT_MAP["vibe"]
+        intent = {}
+    else:
+        # ── 自动模式：LLM 意图解析 与 Embedding 向量化 并发执行 ──
+        intent, query_vec = await asyncio.gather(
+            parse_search_intent(user_query),
+            get_embedding(user_query),
+        )
+
+        intent_type = intent.get("type", "vibe")
+        weights = WEIGHT_MAP.get(intent_type, WEIGHT_MAP["vibe"])
+
+        # exact 类型：有明确歌手或歌名，直接精确匹配，跳过向量计算
+        if intent_type == "exact" and (intent.get("artist") or intent.get("title")):
+            results = await _exact_search(intent, top_k, db)
+            # 精确匹配无结果时降级为混合搜索
+            if results:
+                return SearchResponse(query=user_query, intent_type=intent_type, results=results)
+
+        # 若 LLM 提取的 vibe 与原始 query 不同，则单独向量化 vibe
+        vibe_query = intent.get("vibe") or user_query
+        if vibe_query != user_query:
+            query_vec = await get_embedding(vibe_query)
 
     # 2. 关键词分词
     cleaned_words = _clean_query_words(user_query)
