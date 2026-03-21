@@ -97,10 +97,50 @@ async def perform_hybrid_search(
     mode=exact     : 直接走精确关键词匹配，跳过 LLM 和 Embedding
     """
 
-    # ── 手动指定 exact 模式：直接精确匹配，最快 ──
+    # ── 手动指定 exact 模式：分词后走关键词 SQL，跳过 LLM 和 Embedding ──
     if mode == "exact":
-        intent = {"type": "exact", "title": user_query, "artist": user_query}
-        results = await _exact_search(intent, top_k, db)
+        cleaned_words = _clean_query_words(user_query)
+        ts_query = " | ".join(cleaned_words)
+        # 把每个分词结果都作为 ILIKE 模糊匹配候选
+        like_pattern = "%" + "%".join(cleaned_words) + "%"
+        exact_kw_sql = sql_text("""
+            SELECT
+                id, title, artist, album_cover,
+                vibe_tags, review_text, core_lyrics,
+                (
+                    CASE WHEN artist ILIKE :like_q THEN 2.0 ELSE 0 END +
+                    CASE WHEN title  ILIKE :like_q THEN 3.0 ELSE 0 END +
+                    ts_rank_cd(
+                        to_tsvector('simple', title || ' ' || artist || ' ' || COALESCE(segmented_lyrics, '')),
+                        to_tsquery('simple', :ts_q)
+                    )
+                ) AS score
+            FROM songs
+            WHERE is_duplicate = false
+              AND (
+                  artist ILIKE :like_q OR
+                  title  ILIKE :like_q OR
+                  to_tsvector('simple', title || ' ' || artist || ' ' || COALESCE(segmented_lyrics, ''))
+                      @@ to_tsquery('simple', :ts_q)
+              )
+            ORDER BY score DESC
+            LIMIT :limit
+        """)
+        result = await db.execute(exact_kw_sql, {
+            "like_q": f"%{user_query}%",
+            "ts_q": ts_query,
+            "limit": top_k,
+        })
+        rows = result.fetchall()
+        results = [
+            SongSearchResult(
+                id=row.id, title=row.title, artist=row.artist,
+                album_cover=row.album_cover, review_text=row.review_text,
+                vibe_tags=row.vibe_tags, core_lyrics=row.core_lyrics,
+                score=round(min(float(row.score) / 5.0, 1.0), 4),
+            )
+            for row in rows
+        ]
         return SearchResponse(query=user_query, intent_type="exact", results=results)
 
     # ── 手动指定 vibe 模式：跳过 LLM，直接向量化搜索 ──
