@@ -17,14 +17,17 @@ from app.schemas import SongSearchResult
 # 推荐缓存：最多 500 首，1 小时过期
 _recommend_cache: TTLCache = TTLCache(maxsize=500, ttl=3600)
 
-# 去掉括号内容和版本后缀，提取主标题用于模糊去重
+# 模糊去重用的正则：去掉括号内容、版本关键词、空格后内容，提取主标题
 _BRACKET_RE = re.compile(r'[\(\uff08\[\u3010][^\)\uff09\]\u3011]*[\)\uff09\]\u3011]')
-_VERSION_RE = re.compile(r'(cover|live|remix|dj|\u7ffb\u5531|\u7248|ver\.?).*$', re.IGNORECASE)
+_VERSION_RE = re.compile('(cover|live|remix|dj|\u7ffb\u5531|\u7248|ver\\.?).*$', re.IGNORECASE)
+_SPACE_RE   = re.compile(r'\s+.*$')
 
 
 def _base_title(title: str) -> str:
-    t = _BRACKET_RE.sub('', title)
-    t = _VERSION_RE.sub('', t)
+    """提取主标题用于模糊去重"""
+    t = _BRACKET_RE.sub('', title)   # 安和桥（DJ版）  -> 安和桥
+    t = _VERSION_RE.sub('', t)       # 安和桥 Live     -> 安和桥
+    t = _SPACE_RE.sub('', t)         # 老男孩 筷子兄弟  -> 老男孩
     return t.strip()
 
 
@@ -42,7 +45,7 @@ async def get_similar_songs(
     if source.review_vector is None:
         return []
 
-    # cache key 不含 dedupe：始终缓存足量的原始候选列表，去重在返回前做 Python 过滤
+    # cache key 不含 dedupe：始终缓存足量原始候选列表，去重在返回前做 Python 过滤
     cache_key = (source.id, top_k, w_review, w_lyrics, w_tfidf)
     if cache_key not in _recommend_cache:
         src_review_vec = str(source.review_vector.tolist())
@@ -105,7 +108,6 @@ async def get_similar_songs(
         })
         rows = db_result.fetchall()
 
-        # 缓存原始全量候选列表（未去重）
         _recommend_cache[cache_key] = [
             SongSearchResult(
                 id=row.id,
@@ -125,18 +127,17 @@ async def get_similar_songs(
             for row in rows
         ]
 
-    # 从缓存取全量候选，按需去重后截取 top_k
     all_candidates = _recommend_cache[cache_key]
     if not dedupe:
         return all_candidates[:top_k]
 
-    seen_base_titles: set[str] = set()
+    seen: set[str] = set()
     results = []
     for item in all_candidates:
         base = _base_title(item.title)
-        if base in seen_base_titles:
+        if base in seen:
             continue
-        seen_base_titles.add(base)
+        seen.add(base)
         results.append(item)
         if len(results) >= top_k:
             break
