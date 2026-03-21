@@ -85,8 +85,8 @@ export default function SongCard({ song, index = 0 }) {
           </div>
         </div>
 
-        {/* Score badge (search results) */}
-        {song.score > 0 && (
+        {/* Score badge (search results) — 仅语义搜索有 0~1 的归一化分数时显示 */}
+        {song.score > 0 && song.score <= 1 && (
           <div style={{
             position: 'absolute',
             top: 8,

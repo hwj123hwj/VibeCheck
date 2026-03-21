@@ -80,7 +80,7 @@ async def _exact_search(
             id=row.id, title=row.title, artist=row.artist,
             album_cover=row.album_cover, review_text=row.review_text,
             vibe_tags=row.vibe_tags, core_lyrics=row.core_lyrics,
-            score=round(float(row.score), 4),
+            score=round(float(row.score) / 5.0, 4),  # 归一化到 0~1（最高分 artist+title = 5.0）
         )
         for row in rows
     ]
