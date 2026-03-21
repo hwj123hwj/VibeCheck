@@ -31,89 +31,97 @@ async def get_similar_songs(
     if source.review_vector is None:
         return []
 
-    cache_key = (source.id, top_k, w_review, w_lyrics, w_tfidf, dedupe)
-    if cache_key in _recommend_cache:
-        return _recommend_cache[cache_key]
+    # cache key 不含 dedupe：始终缓存足量的原始候选列表，去重在返回前做 Python 过滤
+    cache_key = (source.id, top_k, w_review, w_lyrics, w_tfidf)
+    if cache_key not in _recommend_cache:
+        src_review_vec = str(source.review_vector.tolist())
+        src_lyrics_vec = str(source.lyrics_vector.tolist()) if source.lyrics_vector is not None else src_review_vec
 
-    src_review_vec = str(source.review_vector.tolist())
-    src_lyrics_vec = str(source.lyrics_vector.tolist()) if source.lyrics_vector is not None else src_review_vec
+        src_tfidf_keys: list[str] = []
+        if source.tfidf_vector and isinstance(source.tfidf_vector, dict):
+            src_tfidf_keys = list(source.tfidf_vector.keys())[:20]
 
-    src_tfidf_keys: list[str] = []
-    if source.tfidf_vector and isinstance(source.tfidf_vector, dict):
-        src_tfidf_keys = list(source.tfidf_vector.keys())[:20]
+        # 始终多取 5 倍候选，保证去重后仍有足够结果
+        fetch_limit = top_k * 5
 
-    # dedupe=True 时多取一些候选，Python 层按 title 去重后再截取 top_k
-    fetch_limit = top_k * 5 if dedupe else top_k
-
-    recommend_sql = sql_text("""
-        WITH candidates AS (
+        recommend_sql = sql_text("""
+            WITH candidates AS (
+                SELECT
+                    id, title, artist, album_cover,
+                    vibe_tags, review_text, core_lyrics,
+                    (1 - (review_vector <=> CAST(:src_review_vec AS vector))) AS review_sim,
+                    COALESCE(1 - (lyrics_vector <=> CAST(:src_lyrics_vec AS vector)), 0) AS lyrics_sim,
+                    COALESCE(
+                        (
+                            SELECT COUNT(*)::float
+                            FROM jsonb_object_keys(COALESCE(tfidf_vector, '{}'::jsonb)) AS k(key)
+                            WHERE k.key = ANY(CAST(:src_tfidf_keys AS text[]))
+                        ) / NULLIF(:src_tfidf_len, 0),
+                        0
+                    ) AS tfidf_overlap
+                FROM songs
+                WHERE id != :src_id
+                  AND review_vector IS NOT NULL
+                  AND is_duplicate = false
+            )
             SELECT
                 id, title, artist, album_cover,
                 vibe_tags, review_text, core_lyrics,
-                (1 - (review_vector <=> CAST(:src_review_vec AS vector))) AS review_sim,
-                COALESCE(1 - (lyrics_vector <=> CAST(:src_lyrics_vec AS vector)), 0) AS lyrics_sim,
-                COALESCE(
-                    (
-                        SELECT COUNT(*)::float
-                        FROM jsonb_object_keys(COALESCE(tfidf_vector, '{}'::jsonb)) AS k(key)
-                        WHERE k.key = ANY(CAST(:src_tfidf_keys AS text[]))
-                    ) / NULLIF(:src_tfidf_len, 0),
-                    0
-                ) AS tfidf_overlap
-            FROM songs
-            WHERE id != :src_id
-              AND review_vector IS NOT NULL
-              AND is_duplicate = false
-        )
-        SELECT
-            id, title, artist, album_cover,
-            vibe_tags, review_text, core_lyrics,
-            review_sim, lyrics_sim, tfidf_overlap
-        FROM candidates
-        ORDER BY
-            review_sim * :w_review
-            + lyrics_sim * :w_lyrics
-            + tfidf_overlap * :w_tfidf
-            DESC
-        LIMIT :limit
-    """)
+                review_sim, lyrics_sim, tfidf_overlap
+            FROM candidates
+            ORDER BY
+                review_sim * :w_review
+                + lyrics_sim * :w_lyrics
+                + tfidf_overlap * :w_tfidf
+                DESC
+            LIMIT :limit
+        """)
 
-    result = await db.execute(recommend_sql, {
-        "src_id": source.id,
-        "src_review_vec": src_review_vec,
-        "src_lyrics_vec": src_lyrics_vec,
-        "src_tfidf_keys": src_tfidf_keys,
-        "src_tfidf_len": len(src_tfidf_keys),
-        "limit": fetch_limit,
-        "w_review": w_review,
-        "w_lyrics": w_lyrics,
-        "w_tfidf": w_tfidf,
-    })
-    rows = result.fetchall()
+        db_result = await db.execute(recommend_sql, {
+            "src_id": source.id,
+            "src_review_vec": src_review_vec,
+            "src_lyrics_vec": src_lyrics_vec,
+            "src_tfidf_keys": src_tfidf_keys,
+            "src_tfidf_len": len(src_tfidf_keys),
+            "limit": fetch_limit,
+            "w_review": w_review,
+            "w_lyrics": w_lyrics,
+            "w_tfidf": w_tfidf,
+        })
+        rows = db_result.fetchall()
 
-    results = []
+        # 缓存原始全量候选列表（未去重）
+        _recommend_cache[cache_key] = [
+            SongSearchResult(
+                id=row.id,
+                title=row.title,
+                artist=row.artist,
+                album_cover=row.album_cover,
+                review_text=row.review_text,
+                vibe_tags=row.vibe_tags,
+                core_lyrics=row.core_lyrics,
+                score=round(
+                    float(row.review_sim) * w_review
+                    + float(row.lyrics_sim) * w_lyrics
+                    + float(row.tfidf_overlap) * w_tfidf,
+                    4,
+                ),
+            )
+            for row in rows
+        ]
+
+    # 从缓存取全量候选，按需去重后截取 top_k
+    all_candidates = _recommend_cache[cache_key]
+    if not dedupe:
+        return all_candidates[:top_k]
+
     seen_titles: set[str] = set()
-    for row in rows:
-        if dedupe:
-            if row.title in seen_titles:
-                continue
-            seen_titles.add(row.title)
-        results.append(SongSearchResult(
-            id=row.id,
-            title=row.title,
-            artist=row.artist,
-            album_cover=row.album_cover,
-            review_text=row.review_text,
-            vibe_tags=row.vibe_tags,
-            core_lyrics=row.core_lyrics,
-            score=round(
-                float(row.review_sim) * w_review
-                + float(row.lyrics_sim) * w_lyrics
-                + float(row.tfidf_overlap) * w_tfidf,
-                4,
-            ),
-        ))
+    results = []
+    for item in all_candidates:
+        if item.title in seen_titles:
+            continue
+        seen_titles.add(item.title)
+        results.append(item)
         if len(results) >= top_k:
             break
-    _recommend_cache[cache_key] = results
     return results

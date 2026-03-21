@@ -86,17 +86,28 @@ export default function SongDetailPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [id])
 
-  const handleRecommend = () => {
-    const tfidf = Math.max(0, parseFloat((1 - wReview - wLyrics).toFixed(2)))
+  const triggerRecommend = (weights, dedupeFlag) => {
     setRecLoading(true)
     setRecError(false)
     setRecommendations([])
     let cancelled = false
-    getRecommendations(id, 6, { w_review: wReview, w_lyrics: wLyrics, w_tfidf: tfidf }, dedupe)
+    getRecommendations(id, 6, weights, dedupeFlag)
       .then(rec => { if (!cancelled) setRecommendations(rec.recommendations || []) })
       .catch(err => { console.error(err); if (!cancelled) setRecError(true) })
       .finally(() => { if (!cancelled) setRecLoading(false) })
     return () => { cancelled = true }
+  }
+
+  const handleRecommend = () => {
+    const tfidf = Math.max(0, parseFloat((1 - wReview - wLyrics).toFixed(2)))
+    triggerRecommend({ w_review: wReview, w_lyrics: wLyrics, w_tfidf: tfidf }, dedupe)
+  }
+
+  const handleDedupeToggle = () => {
+    const next = !dedupe
+    setDedupe(next)
+    const tfidf = Math.max(0, parseFloat((1 - wReview - wLyrics).toFixed(2)))
+    triggerRecommend({ w_review: wReview, w_lyrics: wLyrics, w_tfidf: tfidf }, next)
   }
 
   if (loading) {
@@ -448,7 +459,7 @@ export default function SongDetailPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setDedupe(v => !v)}
+                onClick={handleDedupeToggle}
                 style={{
                   width: 36, height: 20, borderRadius: 10, border: 'none',
                   background: dedupe ? 'var(--accent-pink)' : 'var(--border-subtle)',
