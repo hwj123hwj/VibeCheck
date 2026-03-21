@@ -62,9 +62,9 @@ export default function SongDetailPage() {
       }
     }
 
-    const loadRec = async (weights) => {
+    const loadRec = async (weights, dedupeFlag) => {
       try {
-        const rec = await getRecommendations(id, 6, weights)
+        const rec = await getRecommendations(id, 6, weights, dedupeFlag)
         if (cancelled) return
         setRecommendations(rec.recommendations || [])
       } catch (err) {
@@ -77,7 +77,7 @@ export default function SongDetailPage() {
 
     loadDetail()
     loadLrc()
-    loadRec({})
+    loadRec({}, false)
 
     return () => { cancelled = true }
   }, [id])
