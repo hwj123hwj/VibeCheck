@@ -115,21 +115,12 @@ async def get_similar_songs(
     if not dedupe:
         return all_candidates[:top_k]
 
-    import re
-    def _base_title(title: str) -> str:
-        """提取主标题：去掉括号及其内容、版本后缀，用于模糊去重"""
-        t = re.sub(r'[\(（\[【][^\)）\]】]*[\)）\]】]', '', title)  # 去括号内容
-        t = re.sub(r'(cover|live|remix|dj|翻唱|版|ver\.?)\s*.*
-, '', t, flags=re.IGNORECASE)
-        return t.strip()
-
-    seen_base_titles: set[str] = set()
+    seen_titles: set[str] = set()
     results = []
     for item in all_candidates:
-        base = _base_title(item.title)
-        if base in seen_base_titles:
+        if item.title in seen_titles:
             continue
-        seen_base_titles.add(base)
+        seen_titles.add(item.title)
         results.append(item)
         if len(results) >= top_k:
             break
