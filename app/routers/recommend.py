@@ -19,6 +19,7 @@ async def recommend_songs(
     w_review: float = Query(0.5, ge=0.0, le=1.0, description="评语向量权重"),
     w_lyrics: float = Query(0.4, ge=0.0, le=1.0, description="歌词向量权重"),
     w_tfidf: float = Query(0.1, ge=0.0, le=1.0, description="TF-IDF 关键词权重"),
+    dedupe: bool = Query(False, description="是否按歌名去重"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -32,7 +33,7 @@ async def recommend_songs(
     if not source:
         raise HTTPException(status_code=404, detail="Song not found")
 
-    recommendations = await get_similar_songs(source, top_k, db, w_review, w_lyrics, w_tfidf)
+    recommendations = await get_similar_songs(source, top_k, db, w_review, w_lyrics, w_tfidf, dedupe)
 
     return RecommendResponse(
         source_song=SongBase(

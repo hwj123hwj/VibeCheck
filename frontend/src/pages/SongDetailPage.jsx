@@ -22,6 +22,7 @@ export default function SongDetailPage() {
   const [wReview, setWReview] = useState(0.5)
   const [wLyrics, setWLyrics] = useState(0.4)
   const wTfidf = Math.max(0, parseFloat((1 - wReview - wLyrics).toFixed(2)))
+  const [dedupe, setDedupe] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -91,7 +92,7 @@ export default function SongDetailPage() {
     setRecError(false)
     setRecommendations([])
     let cancelled = false
-    getRecommendations(id, 6, { w_review: wReview, w_lyrics: wLyrics, w_tfidf: tfidf })
+    getRecommendations(id, 6, { w_review: wReview, w_lyrics: wLyrics, w_tfidf: tfidf }, dedupe)
       .then(rec => { if (!cancelled) setRecommendations(rec.recommendations || []) })
       .catch(err => { console.error(err); if (!cancelled) setRecError(true) })
       .finally(() => { if (!cancelled) setRecLoading(false) })
@@ -428,6 +429,42 @@ export default function SongDetailPage() {
                   transition: 'width 0.15s',
                 }} />
               </div>
+            </div>
+
+            {/* 去重开关 */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: '0.875rem',
+              padding: '0.625rem 0.75rem',
+              borderRadius: 'var(--radius-lg)',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-subtle)',
+            }}>
+              <div>
+                <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>同名歌曲去重</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '0.375rem' }}>
+                  {dedupe ? '每个歌名只保留最相似的一条' : '显示全部版本'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDedupe(v => !v)}
+                style={{
+                  width: 36, height: 20, borderRadius: 10, border: 'none',
+                  background: dedupe ? 'var(--accent-pink)' : 'var(--border-subtle)',
+                  cursor: 'pointer', position: 'relative', transition: 'background 0.2s',
+                  flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 3,
+                  left: dedupe ? 18 : 3,
+                  width: 14, height: 14, borderRadius: '50%',
+                  background: 'white',
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                }} />
+              </button>
             </div>
 
             <button

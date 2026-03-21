@@ -25,9 +25,9 @@ export const searchSongs = (query, topK = 10, mode = null) =>
   api.get('/search', { params: { q: query, top_k: topK, ...(mode ? { mode } : {}) } }).then(r => r.data)
 
 // ── Recommend ──────────────────────────
-export const getRecommendations = (songId, topK = 10, weights = {}) =>
+export const getRecommendations = (songId, topK = 10, weights = {}, dedupe = false) =>
   api.get(`/recommend/${songId}`, {
-    params: { top_k: topK, ...weights },
+    params: { top_k: topK, ...weights, ...(dedupe ? { dedupe: true } : {}) },
     timeout: 30000,
   }).then(r => r.data)
 
