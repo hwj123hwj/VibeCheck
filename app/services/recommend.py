@@ -131,7 +131,8 @@ async def get_similar_songs(
     if not dedupe:
         return all_candidates[:top_k]
 
-    seen: set[str] = set()
+    # 把源歌曲自身的主标题预先加入 seen，避免推荐同名歌曲
+    seen: set[str] = {_base_title(source.title)}
     results = []
     for item in all_candidates:
         base = _base_title(item.title)
