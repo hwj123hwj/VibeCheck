@@ -6,6 +6,7 @@
 融合公式：
   FinalScore = 0.5 * Sim_review + 0.4 * Sim_lyrics + 0.1 * TF-IDF_overlap
 """
+import re
 from cachetools import TTLCache
 from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,16 @@ from app.schemas import SongSearchResult
 
 # 推荐缓存：最多 500 首，1 小时过期
 _recommend_cache: TTLCache = TTLCache(maxsize=500, ttl=3600)
+
+# 去掉括号内容和版本后缀，提取主标题用于模糊去重
+_BRACKET_RE = re.compile(r'[\(\uff08\[\u3010][^\)\uff09\]\u3011]*[\)\uff09\]\u3011]')
+_VERSION_RE = re.compile(r'(cover|live|remix|dj|\u7ffb\u5531|\u7248|ver\.?).*$', re.IGNORECASE)
+
+
+def _base_title(title: str) -> str:
+    t = _BRACKET_RE.sub('', title)
+    t = _VERSION_RE.sub('', t)
+    return t.strip()
 
 
 async def get_similar_songs(
@@ -26,7 +37,7 @@ async def get_similar_songs(
     给定一首歌，返回最相似的 Top-K 推荐
 
     双向量余弦相似 + TF-IDF 关键词重叠（参数化 SQL），权重可动态调整
-    dedupe=True 时按歌名去重，每个歌名只保留相似度最高的一条
+    dedupe=True 时按主标题模糊去重，每个歌名只保留相似度最高的一条
     """
     if source.review_vector is None:
         return []
@@ -35,7 +46,11 @@ async def get_similar_songs(
     cache_key = (source.id, top_k, w_review, w_lyrics, w_tfidf)
     if cache_key not in _recommend_cache:
         src_review_vec = str(source.review_vector.tolist())
-        src_lyrics_vec = str(source.lyrics_vector.tolist()) if source.lyrics_vector is not None else src_review_vec
+        src_lyrics_vec = (
+            str(source.lyrics_vector.tolist())
+            if source.lyrics_vector is not None
+            else src_review_vec
+        )
 
         src_tfidf_keys: list[str] = []
         if source.tfidf_vector and isinstance(source.tfidf_vector, dict):
@@ -115,12 +130,13 @@ async def get_similar_songs(
     if not dedupe:
         return all_candidates[:top_k]
 
-    seen_titles: set[str] = set()
+    seen_base_titles: set[str] = set()
     results = []
     for item in all_candidates:
-        if item.title in seen_titles:
+        base = _base_title(item.title)
+        if base in seen_base_titles:
             continue
-        seen_titles.add(item.title)
+        seen_base_titles.add(base)
         results.append(item)
         if len(results) >= top_k:
             break
