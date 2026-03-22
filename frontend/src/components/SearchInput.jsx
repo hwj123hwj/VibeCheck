@@ -52,7 +52,7 @@ export default function SearchInput({ onSearch, isLoading = false, intentType = 
   const examples = [
     '深夜一个人emo的时候听什么',
     '后来我总算学会了如何去爱',
-    '周杰伦 晴天',
+    '安和桥',
     '适合开车兜风的歌',
     '失恋后想大哭一场',
   ]
