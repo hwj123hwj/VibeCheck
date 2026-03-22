@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # --- LongMao LLM ---
     LONGMAO_API_KEY: str = ""
     LONGMAO_BASE_URL: str = "https://api.longcat.chat/openai"
-    LONGMAO_MODEL: str = "LongCat-Flash-Chat"
+    LONGMAO_MODEL: str = "LongCat-Flash-Lite"
 
     # --- App ---
     APP_NAME: str = "VibeCheck"
