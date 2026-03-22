@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import Song
 from app.schemas import SongSearchResult
 
-# 推荐缓存：最多 500 首，1 小时过期
-_recommend_cache: TTLCache = TTLCache(maxsize=500, ttl=3600)
+# 推荐缓存：最多 500 首，10 小时过期
+_recommend_cache: TTLCache = TTLCache(maxsize=500, ttl=36000)
 
 # 模糊去重用的正则：去掉括号内容、版本关键词、空格后内容，提取主标题
 _BRACKET_RE = re.compile(r'[\(\uff08\[\u3010][^\)\uff09\]\u3011]*[\)\uff09\]\u3011]')
